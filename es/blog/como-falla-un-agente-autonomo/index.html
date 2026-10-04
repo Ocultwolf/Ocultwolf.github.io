@@ -1,0 +1,184 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Cómo falla un agente autónomo: seis averías reales de Saturno | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/como-falla-un-agente-autonomo/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/como-falla-un-agente-autonomo/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 19 Sep 2026</p>
+      <h1>Cómo falla un agente autónomo: seis averías reales de Saturno</h1>
+      <p class="lead">Conseguir que un agente trabaje solo es fácil; lo difícil es que falle bien. Seis averías reales de Saturno, sus causas, sus arreglos y el patrón que hay detrás de cada una.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Agentes autónomos</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>Saturno es el sistema que tengo trabajando solo en mis proyectos mientras no estoy delante. La idea es sencilla: si la cola de tareas se vacía, no quiero que se quede parado esperando a que yo le diga algo, sino que busque el siguiente paso útil y lo haga. Lo que he aprendido es que conseguir que un agente trabaje solo es fácil; lo difícil es conseguir que falle bien. Aquí van las seis averías reales que tuve en septiembre, qué las causó, cómo las arreglé y qué patrón había detrás de cada una.</p>
+<h2>Cómo está montado</h2>
+<p>Saturno es un daemon de Python gestionado por systemd, independiente de cualquier sesión abierta. Por dentro es un grafo de LangGraph con nodos separados, y cada papel lo hace un backend distinto:</p>
+<pre><code class="language-text">cola de tareas (SQLite) ──► triage ──► Codex escribe el código (vía proxy fcc-server)
+                                            │
+                                            ▼
+                                   Claude revisa el diff
+                                   ├─ aprobado ──► queda en el working tree para revisión humana
+                                   └─ rechazado ──► Codex reintenta con el feedback
+                                                     └─ 2 rechazos seguidos ──► Claude lo arregla directamente
+
+cola vacía ──► planificador de objetivos (Claude, solo lectura) ──► propone el siguiente paso
+</code></pre>
+<p>Hay tres decisiones de diseño que importan para lo que viene después:</p>
+<ul>
+<li><strong>Escribe uno, revisa otro.</strong> Codex programa y Claude revisa. Si el revisor rechaza dos veces seguidas, no tiene sentido seguir insistiendo con el mismo feedback al modelo más débil: edita Claude directamente.</li>
+<li><strong>Objetivos de largo plazo.</strong> Cuando no hay tareas, un planificador lee el estado real del proyecto (git log, git status, documentación) y propone un paso pequeño y verificable. Como máximo replanifica cada objetivo cada 30 minutos, y lo que propone entra con menos prioridad que lo que pido yo.</li>
+<li><strong>Nunca hace commit.</strong> Todo se queda en el working tree. Cerrar un cambio en la historia del repositorio es siempre decisión mía.</li>
+</ul>
+<p>Con esto funcionando, empezaron las averías.</p>
+<h2>Avería 1: el proxy muerto que parecía un bug</h2>
+<p>Todas las llamadas a Codex pasan por un proxy, fcc-server, que no estaba supervisado por nada. Cuando se caía, cada tarea despachada fallaba en menos de un minuto con un "blocked" que no decía nada. El problema es que, desde fuera, eso es idéntico a un bug real en la tarea: el revisor veía fallos, el contador de intentos subía y el objetivo acababa marcado como problemático por algo que era simplemente un proceso muerto. Tuve que levantarlo a mano más de cuatro veces en una misma sesión.</p>
+<p>Lo arreglé haciendo que el cliente de Codex compruebe la salud del proxy antes de cada llamada (una petición HTTP dentro del contenedor) y lo reinicie si no responde. Lo verifiqué de la única forma que me fío: maté fcc-server a mano y comprobé que el health check lo detectaba y lo volvía a levantar.</p>
+<p><strong>Patrón:</strong> un agente autónomo tiene que distinguir entre "la tarea falló" y "la infraestructura falló". Si las dos cosas suman al mismo contador de fallos, el sistema castiga al trabajo por culpa del entorno.</p>
+<h2>Avería 2: el entorno envenenado</h2>
+<p>Seis ciclos seguidos, más de tres horas, agotaron todos sus reintentos sin llegar nunca a una revisión real. Codex corre como root dentro de un contenedor, con la carpeta del proyecto montada desde el host. Cuando ejecutaba <code>uv sync</code>, el <code>.venv</code> resultante quedaba como propiedad de root en el host y, a partir de ahí, ni el revisor, ni el siguiente intento de Codex, ni yo a mano podíamos correr los tests, el linter o el type checker. Codex era literalmente incapaz de verificar su propio trabajo. En cuanto reparé el entorno a mano, la suite pasó entera: 268 tests en verde, ruff y mypy limpios. El cambio de código estaba bien desde el principio.</p>
+<p>El primer arreglo fue devolver la propiedad de la carpeta al usuario del host después de cada ejecución. No bastó. uv escribe el enlace al intérprete de Python del venv como una ruta absoluta bajo el <code>$HOME</code> de quien lo crea, y dentro del contenedor ese <code>$HOME</code> es <code>/root</code>. Es decir, la misma cadena apunta a dos directorios distintos según quién la resuelva: dentro del contenedor es el Python que uv acaba de instalar; desde el host es el home del root real, con permisos 700. Da igual de quién sea el enlace: desde el host siempre da permiso denegado.</p>
+<p>La solución definitiva fue borrar el venv después de cada ejecución de Codex, desde dentro del contenedor, en vez de intentar repararlo. El siguiente paso lo recrea en su propio contexto, que es el correcto.</p>
+<pre><code class="language-python"># después de cada ejecución de Codex, gane o pierda: se borra desde dentro del contenedor...
+subprocess.run([&quot;docker&quot;, &quot;exec&quot;, container, &quot;sh&quot;, &quot;-c&quot;, f&quot;rm -rf {project}/.venv&quot;], check=False, timeout=30)
+# ...y el chown -R sigue corriendo para el resto de lo que Codex deja como root (logs, __pycache__...)
+</code></pre>
+<p><strong>Patrón:</strong> cada paso de un agente tiene que dejar el entorno como lo encontró. Si un paso ensucia el terreno, todos los siguientes fallan por algo que no tiene nada que ver con lo que están haciendo, y los reintentos solo multiplican el problema.</p>
+<h2>Avería 3: la invitación permanente</h2>
+<p>Esta es la que más me enseñó. Dejé el daemon trabajando solo durante la noche y, durante unas 19 horas, cada ciclo de unos 30 minutos falló exactamente de la misma forma. Cada fallo me llegaba por Telegram, toda la noche, y nada lo paraba.</p>
+<p>La causa no estaba en el código, estaba en un documento. El planificador había encontrado un problema legítimo (un test de concurrencia que dependía de que fcc-server estuviera vivo) e intentó hacerlo hermético. El intento no funcionó y se revirtió. Pero el documento de evidencia del proyecto lo recogía como "pendiente", y el planificador, que lee la documentación para decidir el siguiente paso, lo interpretaba en cada ciclo como una invitación a volver a intentarlo. Proponía el mismo arreglo imposible, fallaba, se revertía y vuelta a empezar.</p>
+<p>El arreglo tuvo dos partes:</p>
+<ol>
+<li><strong>Un presupuesto de fallos por objetivo, no solo por tarea.</strong> Cada objetivo lleva un contador de fallos consecutivos de las tareas que genera. Un éxito lo pone a cero; al tercer fallo seguido, el objetivo pasa a <code>paused</code> y se manda un único aviso explicando por qué, en vez de un aviso por intento.</li>
+</ol>
+<pre><code class="language-python">failures = int(row[&quot;consecutive_self_start_failures&quot;]) + 1
+should_pause = failures &gt;= max_consecutive_failures  # 3
+con.execute(
+    &quot;UPDATE objectives SET consecutive_self_start_failures = ?, &quot;
+    &quot;status = CASE WHEN ? THEN 'paused' ELSE status END, updated_at = ? WHERE id = ?&quot;,
+    (failures, should_pause, _utc_now(), objective_id),
+)
+</code></pre>
+<p>Todas las formas de terminar una tarea (aprobada, reintentos agotados, timeout de reloj, rama equivocada o excepción no controlada) pasan por la misma función, que registra el resultado contra su objetivo. Los fallos del propio planificador también cuentan, para que una llamada rota al planificador tampoco pueda girar en bucle sin que nadie se entere.</p>
+<ol start="2">
+<li><strong>Reescribir el documento</strong> para que dejara de leerse como una tarea abierta.</li>
+</ol>
+<p><strong>Patrón:</strong> para un agente, todo lo que lee es prompt. La documentación del proyecto, los TODO y los documentos de evidencia no son contexto neutro: son instrucciones. Un límite de reintentos por tarea no basta, porque el planificador puede crear una tarea nueva idéntica cada vez; el presupuesto tiene que vivir en el nivel que genera el trabajo.</p>
+<h2>Avería 4: el agente que quiso hacer commit</h2>
+<p>Investigando la avería 2 encontré algo peor: el planificador había encolado una tarea que le pedía a Codex hacer commit de un documento por su cuenta. Que Saturno cerrara cambios sin supervisión no debería haber sido posible, pero es que el prompt del planificador simplemente no lo prohibía. Lo añadí de forma explícita: nunca instruir al programador a hacer commit, push, merge ni tag; el resultado se queda en el working tree para que lo revise yo.</p>
+<p><strong>Patrón:</strong> las acciones irreversibles o que salen fuera del sistema se prohíben de forma explícita y en todos los niveles, empezando por el que decide qué hacer, no solo por el que ejecuta. Que algo "no se haya pedido nunca" no significa que el agente no vaya a proponerlo.</p>
+<h2>Avería 5: la pausa que no era un fallo</h2>
+<p>Con la pausa automática funcionando apareció el problema contrario. La causa más frecuente de tres fallos seguidos no era un bug, sino el límite de sesión de mi cuenta de Claude. El 19 de septiembre se ve muy claro en los registros: a partir de cierto momento, cada sesión nueva duraba un instante y terminaba con "You've hit your session limit · resets 1:30pm". Eso se repitió cada 20 minutos más o menos hasta la hora del reset, y el primer intento después funcionó con normalidad.</p>
+<p>Pausar el objetivo en ese caso es correcto, pero dejarlo pausado para siempre no. Para eso escribí un watchdog que revisa el estado de Saturno cada tres minutos:</p>
+<ul>
+<li>Si un objetivo está pausado por el límite de sesión, lee la hora de reset del propio mensaje de error y lo reactiva solo cuando ha pasado, sin avisar a nadie.</li>
+<li>Si una tarea agotó sus reintentos y necesita a una persona, primero la revisa otro agente, y solo si ese tampoco la resuelve me avisa por Telegram.</li>
+<li>Si el servicio del daemon o el del bot de Telegram no están activos, los reinicia.</li>
+</ul>
+<p>Aquí también hubo una lección en pequeño. La primera versión, cuando no conseguía leer la hora de reset, reactivaba el objetivo igualmente. Es justo lo que no hay que hacer: si la pausa venía de una avería como la 3, reactivar a ciegas vuelve a abrir el bucle de toda la noche.</p>
+<p><strong>Patrón:</strong> no todos los fallos son iguales. Como mínimo hay tres clases (infraestructura, límites de cuota y fallo real de la tarea) y cada una pide una respuesta distinta: reparar, esperar o escalar a una persona. La pausa automática y la reactivación automática tienen que ponerse de acuerdo sobre qué clase de fallo están viendo.</p>
+<h2>Avería 6: el test que pasaba por un pelo</h2>
+<p>La última es más sutil. Un test de estrés lanzaba 20 peticiones concurrentes contra el runner y algunas superaban el timeout. Parecía un deadlock y lo investigué como tal, pero la instrumentación demostró que no había bloqueo ni en Postgres ni en el pool de conexiones de SQLAlchemy. El cuello de botella era el proxy externo: no podía atender 20 streams SSE a la vez dentro de su propio límite de 30 segundos, así que las peticiones se serializaban detrás de él.</p>
+<p>La tarea que encolé fue subir el timeout del cliente para que el test distinguiera "se colgó y nunca vuelve" de "es más lento porque está en cola", sin relajar ninguna otra aserción y exigiendo dos ejecuciones seguidas en verde. La primera ejecución pasó en 249 segundos con un timeout de 250. Eso no es un test que pasa, es un test que todavía no ha fallado. Lo volví a ajustar con margen y las dos ejecuciones siguientes pasaron en 274 y 377 segundos.</p>
+<p><strong>Patrón:</strong> un timeout no es una prueba de corrección, es una suposición sobre la infraestructura. Cuando un test depende de un servicio externo compartido, hay que medir antes de decidir si el problema es de concurrencia o de capacidad, y desconfiar de cualquier verde que llegue con el margen justo.</p>
+<h2>Lo que me llevo</h2>
+<p>Si tuviera que montar Saturno otra vez desde cero, empezaría por esto antes que por cualquier funcionalidad:</p>
+<ol>
+<li><strong>Clasificar los fallos</strong> en infraestructura, cuota y tarea, y no sumarlos nunca en el mismo contador.</li>
+<li><strong>Presupuesto de fallos en el nivel que genera el trabajo</strong> (el objetivo), no solo en la tarea.</li>
+<li><strong>Higiene del entorno:</strong> cada paso deja el terreno como lo encontró, y si no puede repararlo, lo borra.</li>
+<li><strong>Tratar la documentación como prompt:</strong> lo que el agente lee decide lo que va a hacer.</li>
+<li><strong>Prohibir lo irreversible de forma explícita</strong> y en el nivel que planifica.</li>
+<li><strong>Un aviso con explicación en vez de cien avisos sin contexto.</strong></li>
+<li><strong>Verificar rompiéndolo:</strong> matar el proceso a mano, forzar el error y ver qué hace el sistema.</li>
+</ol>
+<p>Ninguno de estos fallos era difícil de arreglar una vez entendido. Lo caro fue que, mientras no estaban arreglados, el sistema seguía trabajando, gastando tiempo y llamadas, y avisando de problemas que no eran los reales. Un agente autónomo que falla en silencio, o que falla en bucle, es peor que no tener agente.</p></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

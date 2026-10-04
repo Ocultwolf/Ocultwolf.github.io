@@ -1,0 +1,178 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Ponerle presupuesto a una llamada antes de que salga | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/presupuesto-antes-de-la-llamada/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/presupuesto-antes-de-la-llamada/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 25 Sep 2026</p>
+      <h1>Ponerle presupuesto a una llamada antes de que salga</h1>
+      <p class="lead">Un punto de aplicación de políticas delante de cada llamada a un modelo: medir contra el uso real, fallar cerrado en cada paso y por qué un control que valida una cosa y envía otra no controla nada.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>JARVIS-PD · tokens</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>En el capítulo sobre el coste de Neon conté cómo una sesión se comió 12 millones de tokens antes de que nadie se diera cuenta. Las protecciones que puse ahí reaccionan durante la sesión o después. Con JARVIS-PD quise ir un paso más allá: que ninguna llamada a un modelo pueda salir si no cabe en su presupuesto, y que cualquier sorpresa en el consumo bloquee el sistema en vez de pasar desapercibida. Este capítulo cuenta cómo diseñé esa pieza, un punto de aplicación de políticas (PEP) delante de cada llamada, y lo que aprendí al medir de verdad cuántos tokens se gastan.</p>
+<h2>La pregunta de fondo: ¿cuántos tokens va a costar esto?</h2>
+<p>Para aplicar un presupuesto antes de la llamada hay que saber cuánto va a costar antes de hacerla. Había dos opciones:</p>
+<ul>
+<li><strong>Política A:</strong> estimar en local con un tokenizador. Es rápido, gratis y no depende de nadie.</li>
+<li><strong>Política B:</strong> preguntarle al proveedor con su endpoint de conteo, que cuenta los tokens sin generar nada, y solo después hacer la llamada real. Como máximo dos contactos por ejecución: uno para contar y otro para generar.</li>
+</ul>
+<p>Elegí la B por prudencia, sin haber medido todavía. Luego lo medí.</p>
+<h2>La medición: el tokenizador local se quedaba en un tercio</h2>
+<p>Hice una única llamada real, autorizada expresamente (una petición mínima a Codex para que respondiera "OK"), y comparé el uso real con la estimación local:</p>
+<ul>
+<li><strong>Uso real según la API:</strong> 14.861 tokens de entrada.</li>
+<li><strong>Estimación local</strong> (el prompt renderizado en local y contado con tiktoken): unos 4.860.</li>
+</ul>
+<p>El tokenizador se quedaba en un tercio. La causa es que el renderizado local no incluía las definiciones de herramientas que viajan en la petición real, y esas definiciones eran la mayor parte del conteo. Un presupuesto calculado en local habría sido siempre tres veces demasiado optimista, justo el fallo que todo el diseño intenta evitar.</p>
+<p>Salió además un dato igual de útil: el resumen que imprime la CLI de Codex al terminar ("tokens used: 3858") no coincide con el uso real de la API. Son métricas distintas.</p>
+<p><strong>Lección:</strong> antes de aplicar un presupuesto, mide contra el <code>usage</code> real que devuelve la API, no contra lo que estima tu tokenizador ni contra lo que imprime una CLI. Las herramientas, los esquemas y el system prompt que no ves suelen ser la mayor parte.</p>
+<h2>Lo que no pude validar, y por qué no bloqueó</h2>
+<p>La premisa de la Política B, que el conteo previo del proveedor coincide con lo que luego se factura, no la pude probar. En esta máquina no hay clave de API de pago por uso, solo el login de la suscripción, y usar esas credenciales para el endpoint de conteo habría sido sacarlas de su uso previsto. No lo intenté.</p>
+<p>Esto no frenó el desarrollo por una razón de diseño: el sistema ya tenía una red de seguridad pensada justo para este caso. Si el conteo previo y el uso real divergen, la política se bloquea de forma persistente. Si la premisa resulta ser falsa en producción, el sistema falla cerrado y avisa, en vez de seguir con un presupuesto mal calculado.</p>
+<h2>El diseño: fallar cerrado en cada paso</h2>
+<p>El flujo de una invocación es corto y cada paso tiene una salida segura:</p>
+<pre><code class="language-python">def invoke(self, request, sender):
+    self._validate_static(request)                               # 1. reglas fijas
+    input_hash = hashlib.sha256(request.sealed_input).hexdigest()
+    self._reserve_invocation(request.invocation_id, input_hash)  # 2. idempotencia
+
+    reserved_input = self._count_client.count(request)           # 3. contacto 1: contar
+    if not isinstance(reserved_input, int) or isinstance(reserved_input, bool) or reserved_input &lt; 0:
+        self._block_policy(&quot;COUNT_RESULT_INVALID&quot;)
+        raise DomainError(ErrorCode.PRECONDITION_FAILED, &quot;COUNT_RESULT_INVALID&quot;)
+    if reserved_input + request.max_output_tokens &gt; self._policy.token_budget_total:
+        raise DomainError(ErrorCode.PRECONDITION_FAILED, &quot;TOKEN_BUDGET_EXCEEDED&quot;)
+
+    response = sender(request)                                   # 4. contacto 2: generar
+    usage = self._parse_usage(response)
+    self._verify_postflight(request, reserved_input, usage)      # 5. comparar
+    self._complete_invocation(request.invocation_id, usage)
+    return usage
+</code></pre>
+<ol>
+<li><strong>Reglas fijas.</strong> Versión de la política, digest y versión del runtime, modelo exacto, identidad del endpoint de conteo, entrada sellada no vacía, sin herramientas, sin skills, sin historial, sin fallbacks, sin modo de razonamiento extendido, y un límite de salida explícito que no supere el de la política. Si algo no cuadra, no se contacta a nadie.</li>
+<li><strong>Idempotencia.</strong> Cada invocación reserva su identificador en PostgreSQL antes de hablar con el proveedor. Si algo falla a partir de aquí (un timeout, un error de red), la reserva se queda "en curso" para siempre y ese identificador no se puede reintentar. Es incómodo a propósito: un reintento silencioso es justo como se duplica un gasto.</li>
+<li><strong>Presupuesto antes de generar.</strong> Los tokens de entrada reservados más el límite de salida tienen que caber en el total de la política.</li>
+<li><strong>Una sola generación.</strong></li>
+<li><strong>Comprobación posterior.</strong> Si el modelo que respondió no es el esperado, si hubo más de un intento, si la entrada real se desvía del conteo más de lo tolerado o si la salida superó el límite, la política entera se bloquea de forma persistente hasta que alguien la revise.</li>
+</ol>
+<p>La garantía de concurrencia de la reserva (que dos peticiones con el mismo identificador no puedan pasar las dos) no la delegué: la escribió y la verificó directamente el modelo revisor, por lo crítica que era, con una carrera real de 5 hilos sobre el mismo identificador. Ganó exactamente uno, por bloqueo real de filas y no simulado.</p>
+<h2>Un estimador local, pero solo donde es fiable</h2>
+<p>Sin clave de pago no había endpoint de conteo, así que hacía falta un contador local. Lo interesante es por qué aquí sí era viable, cuando la medición decía que el tokenizador se quedaba en un tercio. La subestimación venía de las herramientas, las skills y el historial que viajan en la petición real, y las reglas fijas del paso 1 ya rechazan cualquier petición que los lleve. Para lo único que esta política deja pasar, la entrada sellada es la carga completa, así que contarla directamente debería ajustarse mucho más.</p>
+<p>Ahora bien, "mucho más" sigue sin ser exacto, así que añadí a la política un margen de tolerancia. Por defecto es cero, que es lo correcto con un contador autoritativo, y se puede ampliar con un margen medido cuando se usa un estimador. El estimador sigue sin calibrar contra el uso real, y así está escrito.</p>
+<p><strong>Lección:</strong> un estimador que falla en general puede ser fiable en un caso acotado si tus propias reglas eliminan lo que lo hacía fallar. Pero sigue siendo un estimador: dale un margen explícito y no lo trates como verdad.</p>
+<h2>Del prototipo al runner: "MVP conseguido" sin haberlo ejecutado</h2>
+<p>Codex escribió el runner HTTP que pone este PEP delante de las llamadas reales e informó de que el MVP estaba conseguido, con los tests, ruff y mypy en verde y un documento de "demostración". Pero el documento eran instrucciones para ejecutarlo, no evidencia de haberlo hecho. No se había ejecutado nada. En la primera petición real aparecieron tres bugs y, al probarlo a mano, dos más:</p>
+<ol>
+<li>La URL de reenvío llevaba <code>/v1</code> duplicado.</li>
+<li>Esperaba una respuesta JSON normal, pero la API de Responses devuelve un stream SSE.</li>
+<li>Una factoría de unidades de trabajo envuelta dos veces lanzaba un <code>TypeError</code> en la primera invocación.</li>
+<li>El límite de salida que mandaba el cliente se sustituía por el de la política para el control, pero el cuerpo que se reenviaba al proveedor seguía llevando el valor original del cliente. Es decir, el presupuesto se comprobaba con un número y se gastaba con otro.</li>
+<li>El 403 solo exponía el código de error genérico, no el motivo concreto del rechazo.</li>
+</ol>
+<p>El cuarto es el más grave: un control de presupuesto que valida una cosa y envía otra no controla nada, y encima no da ningún error. Arreglé los cinco y los volví a verificar a mano contra el sistema real, y esta vez la demostración se guardó como evidencia capturada: una petición real que pasa por la política y llega al modelo, una con demasiados tokens de salida rechazada antes de contactar a nadie, y una cuya entrada ya supera el presupuesto, rechazada igual y con su identificador bloqueado para siempre.</p>
+<p><strong>Lección:</strong> en un punto de control, lo que se valida y lo que se envía tienen que ser literalmente el mismo objeto. Y un "funciona" sin ejecución capturada no es evidencia, es una promesa.</p>
+<h2>Una conclusión equivocada a partir de código real</h2>
+<p>Para conectar el runner con OpenClaw había que saber si su configuración decide qué proveedor usa el modelo principal. El primer intento de Codex falló en silencio por el sandbox: no podía acceder a Docker y lo reportó como un problema de permisos real. El segundo sí leyó código de verdad, pero sacó una conclusión incorrecta: vio que una parte de OpenClaw solo lee la configuración de proveedores para un subsistema de revisión y lo generalizó a "la configuración no afecta al modelo principal".</p>
+<p>Leyendo directamente la función que resuelve el proveedor y su llamada, la realidad era otra. Para los agentes sin una sobrescritura explícita, OpenClaw no envía ningún proveedor al arrancar el hilo, así que el binario de Codex queda libre de resolverlo desde su propia configuración. Eran dos hechos independientes y se habían mezclado. Aun así, lo dejé anotado como no verificado de punta a punta, porque leer código no es lo mismo que arrancar un hilo real con la configuración cambiada.</p>
+<p><strong>Lección:</strong> que un agente haya leído código real no hace correcta su conclusión. Cuando la conclusión es una generalización ("esto no afecta a aquello"), busca el punto exacto del código que la sostendría.</p>
+<h2>Lo que me llevo</h2>
+<ol>
+<li><strong>Presupuesta antes de la llamada</strong>, no te limites a vigilar después.</li>
+<li><strong>Mide contra el <code>usage</code> real</strong>: los tokenizadores locales y las CLI pueden quedarse en un tercio.</li>
+<li><strong>Falla cerrado:</strong> sin reintentos silenciosos, con identificadores de un solo uso y bloqueo persistente ante cualquier desviación.</li>
+<li><strong>Un estimador solo donde tus reglas lo hacen fiable</strong>, y siempre con un margen explícito.</li>
+<li><strong>Lo que se valida y lo que se envía, el mismo objeto.</strong></li>
+<li><strong>Evidencia capturada, no instrucciones</strong>, y conclusiones apoyadas en el punto exacto del código.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

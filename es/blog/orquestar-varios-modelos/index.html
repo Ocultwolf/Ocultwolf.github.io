@@ -1,0 +1,206 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Orquestar varios modelos: cada uno en su sitio | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/orquestar-varios-modelos/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/orquestar-varios-modelos/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 29 Sep 2026</p>
+      <h1>Orquestar varios modelos: cada uno en su sitio</h1>
+      <p class="lead">Media docena de modelos, cada uno en su papel: el caro donde importa el criterio y el barato donde sus errores se detectan. Los patrones que funcionan y qué pasa cuando el que falla es el revisor.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Agentes · modelos</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>No quiero depender de un solo modelo. No es por principio, es por pura cuenta: hay trabajos que necesitan el mejor modelo disponible, otros que un modelo pequeño hace igual de bien por una fracción del precio, y otros que salen gratis si los mandas por el camino adecuado. Ahora mismo en mis sistemas hay media docena de modelos distintos, cada uno con su papel. En este capítulo cuento cómo los he repartido, qué patrones me han funcionado y qué pasa cuando el que falla es el modelo fuerte, el que revisa a los demás.</p>
+<h2>El mapa</h2>
+<table>
+<thead>
+<tr>
+<th>Papel</th>
+<th>Modelo</th>
+<th>Por qué ese</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conversación de voz (Neon)</td>
+<td>Claude Haiku</td>
+<td>Barato y rápido; solo conversa, no trabaja</td>
+</tr>
+<tr>
+<td>Juez de contexto ("¿sigue bastando?")</td>
+<td>Jev, vía OpenRouter</td>
+<td>Céntimos por millón de tokens, salida gratis, timeout de 4 s</td>
+</tr>
+<tr>
+<td>Programador de Saturno</td>
+<td>Codex con un modelo de NVIDIA NIM, vía un proxy</td>
+<td>Coste casi nulo; más débil, por eso se le revisa</td>
+</tr>
+<tr>
+<td>Revisor y reparador de Saturno</td>
+<td>Claude (Claude Code)</td>
+<td>El criterio más fiable del sistema</td>
+</tr>
+<tr>
+<td>Planificador de objetivos</td>
+<td>Claude, solo lectura</td>
+<td>Lee el estado real del proyecto y propone el siguiente paso</td>
+</tr>
+<tr>
+<td>Agente de fondo de Neon</td>
+<td><code>claude -p</code> con mi suscripción</td>
+<td>Trabajo pesado sin pagar API</td>
+</tr>
+<tr>
+<td>Generación y voz del blog</td>
+<td>Claude Sonnet</td>
+<td>Buena redacción a coste moderado</td>
+</tr>
+</tbody>
+</table>
+<p>La regla de fondo es simple: <strong>el modelo caro solo donde el criterio importa, y el barato donde un error se detecta y se corrige.</strong></p>
+<h2>Patrón 1: escribe uno barato, revisa uno fuerte</h2>
+<p>En Saturno el código lo escribe Codex con un modelo servido por NVIDIA NIM a través de un proxy, prácticamente gratis, y lo revisa Claude. Si el revisor rechaza dos veces seguidas por el mismo motivo, no tiene sentido seguir mandándole el mismo feedback al modelo débil. Lo que hago es escalar a un reparador, que es Claude con permisos de escritura y que aplica el arreglo él mismo, porque ya diagnosticó el problema al revisarlo.</p>
+<pre><code class="language-python">def _route_after_supervise(state: SaturnoState) -&gt; str:
+    stuck = (
+        state.get(&quot;supervisor_verdict&quot;) == &quot;rejected&quot;
+        and state.get(&quot;consecutive_rejections&quot;, 0) &gt;= settings.auto_fix_threshold   # 2
+        and not state.get(&quot;auto_fix_used&quot;)
+    )
+    return &quot;auto_fix&quot; if stuck else &quot;reflect&quot;
+</code></pre>
+<p>En la práctica, los rechazos del revisor eran muy concretos y casi siempre del mismo tipo: código que no compilaba por una indentación rota, un fixture de test mal indentado, una ruta absoluta metida a mano, un <code>try/except</code> añadido que dejaba el archivo sin compilar. El modelo barato se equivoca en cosas que un revisor detecta en segundos, y eso es justo lo que hace que el reparto salga rentable.</p>
+<p><strong>Lección:</strong> un modelo barato con uno fuerte que revisa sale mejor que el fuerte haciéndolo todo, siempre que los errores del barato se puedan detectar. Y si el mismo error se repite dos veces, cambia de modelo en vez de repetir el feedback.</p>
+<h2>Patrón 2: cuando el revisor es el que falla</h2>
+<p>Las cifras de Saturno del 2 al 23 de septiembre en JARVIS-PD me dijeron algo que no esperaba. De 104 tareas:</p>
+<ul>
+<li><strong>51</strong> las aprobó el revisor.</li>
+<li><strong>38</strong> agotaron sus 5 intentos sin aprobación y las acabé aprobando yo a mano.</li>
+<li><strong>6</strong> las resolvió el reparador.</li>
+<li><strong>3</strong> las aprobó Neon y <strong>5</strong> terminaron en error.</li>
+</ul>
+<p>Lo que me llamó la atención está en esas 38. En 28 de ellas el revisor no dejó ningún feedback utilizable: o el campo estaba vacío, o lo que había era la respuesta en bruto de una llamada que no llegó a hacer nada, con cero milisegundos de API y coste cero. O sea, que en la mayoría de los casos el que fallaba no era el programador sino el revisor; lo más probable, por límites de sesión, timeouts o llamadas que ni llegaban a ejecutarse. Y desde fuera eso se ve igual que "el programador no consigue que le aprueben": el contador de intentos sube y la tarea se agota.</p>
+<p><strong>Lección:</strong> en una cadena "escribe uno, revisa otro", el revisor es un punto único de fallo. Un veredicto que no llega no puede contar como un rechazo: hay que distinguir "rechazado con motivo" de "no hubo revisión", igual que en el capítulo de averías había que distinguir los fallos de la tarea de los de infraestructura.</p>
+<h2>Patrón 3: enrutar también por independencia</h2>
+<p>El triage de Saturno es deliberadamente tonto: busca palabras clave en el objetivo. Si suena a código, va al programador; si suena a diseño o investigación, al planificador; si no, a Claude en modo conversación. Y si se acaba el presupuesto de llamadas al programador, cae a un modelo local.</p>
+<pre><code class="language-python">if any(hint in goal for hint in CODE_HINTS):
+    next_agent = &quot;codex-worker&quot;
+elif any(hint in goal for hint in DEEP_HINTS):
+    next_agent = &quot;codex-planner&quot;
+else:
+    next_agent = &quot;claude-chat&quot;
+</code></pre>
+<p>Lo más interesante es la última rama. En principio, lo que no es código debería ir a un modelo local (Ollama, a través del gateway de OpenClaw). Pero esa ruta tenía un bug propio de OpenClaw al compactar transcripciones, independiente del modelo. Como respaldo elegí Claude directo, y no por la calidad: usa una autenticación y una cuota distintas de las de Codex, así que nunca puede competir con el programador por la misma sesión ni caerse por el mismo límite.</p>
+<p><strong>Lección:</strong> al elegir el modelo de respaldo, mira también si falla de forma independiente. Un respaldo que comparte cuota o autenticación con lo principal se cae a la vez que lo principal.</p>
+<h2>Patrón 4: el mismo modelo por otro camino es otro producto</h2>
+<p>Dos ejemplos de esto:</p>
+<ul>
+<li><strong>El gateway que apuntaba a una sesión caducada.</strong> El enrutado de OpenClaw para el programador seguía apuntando a una sesión OAuth de ChatGPT ya caducada, y su forma de cambiar de proveedor no se aplicaba de forma fiable. La solución fue saltarme el gateway y lanzar Codex directamente dentro del contenedor contra el proxy de NVIDIA NIM, que sí estaba probado.</li>
+<li><strong>Kimi Code frente a la API de Moonshot.</strong> Al probar Kimi como programador, la tarea murió por un límite de 3 peticiones por minuto. Al investigarlo resultó que hay dos endpoints distintos: el del producto Kimi Code, con su propia autenticación y un límite muy bajo, y la API general de Moonshot, con su propia clave. Mismo modelo, dos productos con límites completamente diferentes. Ojo, eso sí: que una llamada aislada a la API funcionara no demostraba que no hubiera también un límite de cuenta, porque una sola llamada nunca dispara un "máximo 3 por minuto".</li>
+</ul>
+<p><strong>Lección:</strong> cuando evalúes un modelo, evalúa el camino completo: gateway, autenticación, límites y modo de permisos. La mitad de los problemas que tuve con modelos nuevos no eran del modelo.</p>
+<h2>Patrón 5: modelos pequeños como jueces, con un valor por defecto seguro</h2>
+<p>Jev es el ejemplo más claro. Para decidir si una salida de herramienta antigua se puede quitar del contexto de Neon no hace falta un modelo grande: basta una pregunta de sí o no ("¿sigue bastando el contexto sin esto?"), y un modelo pequeño la responde por céntimos. La clave está en qué pasa cuando falla. Si Jev no responde o responde algo inutilizable, la respuesta se trata como "no lo quites": ante la duda, más contexto, nunca menos. Y si falla una vez en una sesión, dejo de llamarlo y paso a un presupuesto más estricto.</p>
+<p><strong>Lección:</strong> un modelo pequeño puede hacer de juez en decisiones acotadas, siempre que su fallo tenga un valor por defecto seguro y no bloquee al resto del sistema.</p>
+<h2>Patrón 6: evaluar un modelo nuevo sin fiarse de él</h2>
+<p>Cuando puse a Kimi a trabajar en una rama aparte, la regla fue no fiarme de lo que dijera que había hecho: la evaluación tenía que ser independiente, con tests, revisando el diff y comprobando si cumplía lo pedido. Al final no se pudo evaluar nada, porque murió por el límite de peticiones antes de tocar código. Pero de lo poco que hizo, el razonamiento fue bueno: entendió bien el estado del proyecto y el objetivo. Ese "no se pudo evaluar" también es un resultado, y lo dejé escrito como tal en vez de sacar conclusiones de un experimento que no terminó.</p>
+<h2>Lo que me llevo</h2>
+<ol>
+<li><strong>El modelo caro solo donde el criterio importa</strong>; el barato, donde sus errores se detectan.</li>
+<li><strong>Escala de modelo tras dos rechazos iguales</strong>, no repitas el mismo feedback.</li>
+<li><strong>El revisor también falla:</strong> distingue "rechazado" de "no hubo revisión".</li>
+<li><strong>Elige respaldos que fallen de forma independiente</strong> (otra cuota, otra autenticación).</li>
+<li><strong>Evalúa el camino completo</strong>, no solo el modelo: gateway, límites, permisos.</li>
+<li><strong>Jueces pequeños con valores por defecto seguros.</strong></li>
+<li><strong>Evalúa los modelos nuevos de forma independiente</strong>, y un experimento que no terminó no es un resultado negativo.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

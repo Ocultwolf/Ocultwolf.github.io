@@ -1,0 +1,184 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>How an autonomous agent fails: six real Saturno breakdowns | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/como-falla-un-agente-autonomo/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/como-falla-un-agente-autonomo/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 19 Sep 2026</p>
+      <h1>How an autonomous agent fails: six real Saturno breakdowns</h1>
+      <p class="lead">Getting an agent to work on its own is easy; the hard part is getting it to fail well. Six real Saturno breakdowns, their causes, their fixes, and the pattern behind each one.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Autonomous agents</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>Saturno is the system I have working on its own across my projects while I'm not at the keyboard. The idea is simple: if the task queue empties, I don't want it to sit idle waiting for me to tell it something. I want it to find the next useful step and do it. What I've learned is that getting an agent to work on its own is easy. The hard part is getting it to fail well. Here are the six real breakdowns I had in September, what caused them, how I fixed them, and the pattern behind each one.</p>
+<h2>How it's built</h2>
+<p>Saturno is a Python daemon managed by systemd, independent of any open session. Internally it's a LangGraph graph with separate nodes, and a different backend plays each role:</p>
+<pre><code class="language-text">cola de tareas (SQLite) ──► triage ──► Codex escribe el código (vía proxy fcc-server)
+                                            │
+                                            ▼
+                                   Claude revisa el diff
+                                   ├─ aprobado ──► queda en el working tree para revisión humana
+                                   └─ rechazado ──► Codex reintenta con el feedback
+                                                     └─ 2 rechazos seguidos ──► Claude lo arregla directamente
+
+cola vacía ──► planificador de objetivos (Claude, solo lectura) ──► propone el siguiente paso
+</code></pre>
+<p>Three design decisions matter for what comes next:</p>
+<ul>
+<li><strong>One writes, another reviews.</strong> Codex writes the code and Claude reviews it. If the reviewer rejects twice in a row, there's no point in pushing the same feedback at the weaker model again: Claude edits directly.</li>
+<li><strong>Long-term goals.</strong> When there are no tasks, a planner reads the real state of the project (git log, git status, documentation) and proposes a small, verifiable step. It re-plans each goal at most every 30 minutes, and what it proposes goes in with lower priority than what I ask for myself.</li>
+<li><strong>It never commits.</strong> Everything stays in the working tree. Closing a change into the repository history is always my decision.</li>
+</ul>
+<p>With this running, the breakdowns began.</p>
+<h2>Breakdown 1: the dead proxy that looked like a bug</h2>
+<p>Every call to Codex goes through a proxy, fcc-server, which nothing was supervising. When it went down, every dispatched task failed in under a minute with a "blocked" that said nothing. The problem is that, from the outside, that is identical to a real bug in the task: the reviewer saw failures, the attempt counter went up, and the goal ended up flagged as problematic because of what was simply a dead process. I had to bring it back up by hand more than four times in a single session.</p>
+<p>I fixed it by making the Codex client check the proxy's health before every call (an HTTP request from inside the container) and restart it if it doesn't respond. I verified it the only way I trust: I killed fcc-server by hand and checked that the health check detected it and brought it back up.</p>
+<p><strong>Pattern:</strong> an autonomous agent has to distinguish between "the task failed" and "the infrastructure failed". If both add to the same failure counter, the system punishes the work for the environment's fault.</p>
+<h2>Breakdown 2: the poisoned environment</h2>
+<p>Six cycles in a row, over three hours, used up all their retries without ever reaching a real review. Codex runs as root inside a container, with the project folder mounted from the host. When it ran <code>uv sync</code>, the resulting <code>.venv</code> ended up owned by root on the host, and from then on neither the reviewer, nor Codex's next attempt, nor I by hand could run the tests, the linter or the type checker. Codex was literally unable to verify its own work. As soon as I repaired the environment by hand, the whole suite passed: 268 tests green, ruff and mypy clean. The code change had been fine from the start.</p>
+<p>The first fix was to hand ownership of the folder back to the host user after every run. It wasn't enough. uv writes the link to the venv's Python interpreter as an absolute path under the <code>$HOME</code> of whoever creates it, and inside the container that <code>$HOME</code> is <code>/root</code>. So the same string points to two different directories depending on who resolves it: inside the container it's the Python that uv just installed, and from the host it's the real root's home, with 700 permissions. It doesn't matter who owns the link: from the host it always gives permission denied.</p>
+<p>The final solution was to delete the venv after every Codex run, from inside the container, instead of trying to repair it. The next step recreates it in its own context, which is the right one.</p>
+<pre><code class="language-python"># después de cada ejecución de Codex, gane o pierda: se borra desde dentro del contenedor...
+subprocess.run([&quot;docker&quot;, &quot;exec&quot;, container, &quot;sh&quot;, &quot;-c&quot;, f&quot;rm -rf {project}/.venv&quot;], check=False, timeout=30)
+# ...y el chown -R sigue corriendo para el resto de lo que Codex deja como root (logs, __pycache__...)
+</code></pre>
+<p><strong>Pattern:</strong> every step an agent takes has to leave the environment as it found it. If one step dirties the ground, every later step fails over something that has nothing to do with what it's doing, and retries only multiply the problem.</p>
+<h2>Breakdown 3: the standing invitation</h2>
+<p>This is the one that taught me the most. I left the daemon working alone overnight and, for about 19 hours, every cycle of roughly 30 minutes failed in exactly the same way. Each failure reached me on Telegram, all night, and nothing stopped it.</p>
+<p>The cause wasn't in the code, it was in a document. The planner had found a legitimate problem (a concurrency test that depended on fcc-server being alive) and tried to make it hermetic. The attempt didn't work and was reverted. But the project's evidence document listed it as "pending", and the planner, which reads the documentation to decide the next step, interpreted that on every cycle as an invitation to try again. It proposed the same impossible fix, it failed, it was reverted, and around we went.</p>
+<p>The fix had two parts:</p>
+<ol>
+<li><strong>A failure budget per goal, not just per task.</strong> Each goal carries a counter of consecutive failures among the tasks it generates. A success resets it to zero; on the third failure in a row, the goal moves to <code>paused</code> and a single notice goes out explaining why, instead of one notice per attempt.</li>
+</ol>
+<pre><code class="language-python">failures = int(row[&quot;consecutive_self_start_failures&quot;]) + 1
+should_pause = failures &gt;= max_consecutive_failures  # 3
+con.execute(
+    &quot;UPDATE objectives SET consecutive_self_start_failures = ?, &quot;
+    &quot;status = CASE WHEN ? THEN 'paused' ELSE status END, updated_at = ? WHERE id = ?&quot;,
+    (failures, should_pause, _utc_now(), objective_id),
+)
+</code></pre>
+<p>Every way a task can end (approved, retries exhausted, wall-clock timeout, wrong branch or unhandled exception) goes through the same function, which records the result against its goal. The planner's own failures count too, so that a broken planner call can't spin in a loop without anyone finding out.</p>
+<ol start="2">
+<li><strong>Rewriting the document</strong> so it stopped reading like an open task.</li>
+</ol>
+<p><strong>Pattern:</strong> for an agent, everything it reads is prompt. Project documentation, TODOs and evidence documents are not neutral context: they are instructions. A per-task retry limit isn't enough, because the planner can create an identical new task every time. The budget has to live at the level that generates the work.</p>
+<h2>Breakdown 4: the agent that wanted to commit</h2>
+<p>While investigating breakdown 2 I found something worse: the planner had queued a task asking Codex to commit a document on its own. Saturno closing changes without supervision should not have been possible, but the planner's prompt simply didn't forbid it. I added it explicitly: never instruct the programmer to commit, push, merge or tag; the result stays in the working tree for me to review.</p>
+<p><strong>Pattern:</strong> irreversible actions, or ones that reach outside the system, get forbidden explicitly and at every level, starting with the one that decides what to do, not just the one that executes. The fact that something "has never been asked for" doesn't mean the agent won't propose it.</p>
+<h2>Breakdown 5: the pause that wasn't a failure</h2>
+<p>With automatic pausing working, the opposite problem appeared. The most frequent cause of three failures in a row wasn't a bug, but my Claude account's session limit. September 19 shows up very clearly in the logs: from a certain point on, every new session lasted a moment and ended with "You've hit your session limit · resets 1:30pm". That repeated roughly every 20 minutes until the reset time, and the first attempt after it worked normally.</p>
+<p>Pausing the goal in that case is right, but leaving it paused forever is not. For that I wrote a watchdog that checks Saturno's state every three minutes:</p>
+<ul>
+<li>If a goal is paused because of the session limit, it reads the reset time from the error message itself and reactivates the goal only once that time has passed, without notifying anyone.</li>
+<li>If a task exhausted its retries and needs a person, another agent reviews it first, and only if that one doesn't resolve it either does it notify me on Telegram.</li>
+<li>If the daemon's service or the Telegram bot's service isn't active, it restarts them.</li>
+</ul>
+<p>There was a small lesson here too. The first version, when it couldn't read the reset time, reactivated the goal anyway. That is exactly what you shouldn't do: if the pause came from a breakdown like number 3, reactivating blindly reopens the all-night loop.</p>
+<p><strong>Pattern:</strong> not all failures are equal. There are at least three classes (infrastructure, quota limits and real task failure) and each calls for a different response: repair, wait or escalate to a person. Automatic pausing and automatic reactivation have to agree on which class of failure they're looking at.</p>
+<h2>Breakdown 6: the test that barely passed</h2>
+<p>The last one is more subtle. A stress test fired 20 concurrent requests at the runner and some exceeded the timeout. It looked like a deadlock and I investigated it as one, but the instrumentation showed there was no blocking in either Postgres or SQLAlchemy's connection pool. The bottleneck was the external proxy: it couldn't serve 20 SSE streams at once within its own 30-second limit, so the requests were being serialized behind it.</p>
+<p>The task I queued was to raise the client timeout so the test could tell "it hung and never comes back" apart from "it's slower because it's queued", without relaxing any other assertion and requiring two green runs in a row. The first run passed in 249 seconds with a timeout of 250. That isn't a test that passes, it's a test that hasn't failed yet. I adjusted it again with some margin, and the next two runs passed in 274 and 377 seconds.</p>
+<p><strong>Pattern:</strong> a timeout is not proof of correctness, it's an assumption about the infrastructure. When a test depends on a shared external service, you have to measure before deciding whether the problem is concurrency or capacity, and distrust any green that arrives with just enough margin.</p>
+<h2>What I take from this</h2>
+<p>If I had to build Saturno again from scratch, I'd start with this before any feature:</p>
+<ol>
+<li><strong>Classify failures</strong> into infrastructure, quota and task, and never add them to the same counter.</li>
+<li><strong>A failure budget at the level that generates the work</strong> (the goal), not just the task.</li>
+<li><strong>Environment hygiene:</strong> every step leaves the ground as it found it, and if it can't repair it, it deletes it.</li>
+<li><strong>Treat documentation as prompt:</strong> what the agent reads decides what it will do.</li>
+<li><strong>Forbid the irreversible explicitly</strong> and at the level that plans.</li>
+<li><strong>One notice with an explanation instead of a hundred notices with no context.</strong></li>
+<li><strong>Verify by breaking it:</strong> kill the process by hand, force the error and see what the system does.</li>
+</ol>
+<p>None of these failures was hard to fix once I understood it. What was expensive was that, while they were unfixed, the system kept working, spending time and calls, and warning me about problems that weren't the real ones. An autonomous agent that fails silently, or that fails in a loop, is worse than having no agent.</p></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

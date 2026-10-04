@@ -1,0 +1,190 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Un servicio HTTP en Python bajo presión: concurrencia, validación y el deadlock que no existía | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/servicio-http-python-concurrencia-validacion/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/servicio-http-python-concurrencia-validacion/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 20 Sep 2026</p>
+      <h1>Un servicio HTTP en Python bajo presión: concurrencia, validación y el deadlock que no existía</h1>
+      <p class="lead">Un runner HTTP pequeño que aplica presupuestos de tokens me enseñó más sobre robustez que casi nada: concurrencia, validación en capas, mocks que no llegan, un deadlock que no existía y trabajo aprobado que se perdió.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>JARVIS-PD · robustez</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>Dentro de JARVIS-PD, mi proyecto de sistema de agentes, hay una pieza pequeña pero crítica: un runner HTTP que se pone delante de cada llamada a un modelo y aplica un presupuesto de tokens antes de dejarla pasar. Son unos pocos cientos de líneas y, aun así, me enseñó más sobre robustez que casi cualquier otra parte del sistema. Parte del trabajo lo hicieron agentes (Codex escribiendo, Claude revisando), así que este capítulo también va de algo menos obvio: cómo uno se engaña con la evidencia, sea humano o agente.</p>
+<h2>Qué hace el runner</h2>
+<p>Es un punto de aplicación de políticas. Recibe una petición, la valida, cuenta los tokens de entrada en local, reserva la invocación en PostgreSQL con una clave de idempotencia, llama al proveedor en streaming (SSE) y, al terminar, compara el uso real con lo que había estimado. Si la diferencia supera la tolerancia de la política, bloquea esa versión de la política de forma persistente hasta que alguien la revise.</p>
+<pre><code class="language-text">POST ──► validar ──► contar tokens ──► reservar en Postgres ──► llamar al proveedor (SSE)
+                                         (idempotencia +             │
+                                          política no bloqueada)     ▼
+                                                           comparar uso real vs estimado
+                                                           └─ desvío &gt; tolerancia ──► bloquear política
+</code></pre>
+<p>La reserva bloquea con <code>SELECT ... FOR UPDATE</code> la fila de estado de la política y la de idempotencia de esa invocación, en ese orden y dentro de la misma transacción. Así dos peticiones concurrentes no pueden reutilizar la misma clave ni colarse por una política recién bloqueada.</p>
+<h2>1. El servidor que atendía de uno en uno</h2>
+<p>La primera versión usaba <code>HTTPServer</code> de la librería estándar, que atiende las peticiones de una en una. Mientras una esperaba la respuesta del proveedor, que puede tardar decenas de segundos, todas las demás hacían cola. Lo arreglé pasando a <code>ThreadingHTTPServer</code>, con un apagado ordenado: con SIGTERM o SIGINT se llama a <code>shutdown()</code>, que deja de aceptar peticiones nuevas y deja terminar las que están en curso.</p>
+<pre><code class="language-python">httpd = ThreadingHTTPServer(server_address, TokenEnforcementHandler)
+
+if threading.current_thread() is threading.main_thread():
+    def signal_handler(signum, frame):
+        httpd.shutdown()
+    signal.signal(signal.SIGTERM, signal_handler)
+</code></pre>
+<p>El test que lo prueba no comprueba que las dos peticiones "funcionen", sino que sus ventanas de tiempo se solapen. Esa es la propiedad que de verdad importa: que una no espere a la otra.</p>
+<p><strong>Lección:</strong> para probar concurrencia, comprueba la propiedad concurrente (que hay solapamiento) y no solo que cada petición sale bien por separado. Un servidor secuencial pasa ese segundo test sin problemas.</p>
+<h2>2. Validar la entrada en capas</h2>
+<p>Un servicio que está delante de algo caro tiene que rechazar pronto y limpio todo lo que no sea válido. Los casos fueron saliendo uno a uno, varios de ellos detectados por el planificador autónomo de Saturno (y, como cuento en la sección 6, no todos siguen en la rama principal):</p>
+<ul>
+<li><strong><code>Content-Length</code> no numérico o negativo:</strong> 400, no una excepción.</li>
+<li><strong>Cuerpo con UTF-8 inválido:</strong> el decodificado y el parseo del JSON estaban en el mismo <code>try</code>, que solo capturaba <code>JSONDecodeError</code>. Un <code>UnicodeDecodeError</code> se escapaba y tumbaba la conexión en vez de devolver un 400. Lo solucioné separándolos en dos bloques, cada uno con su error.</li>
+<li><strong>JSON válido pero que no es un objeto</strong> (una lista, un número): 400 limpio, en vez de fallar más adelante al acceder a un campo.</li>
+<li><strong>Uso que devuelve el proveedor:</strong> <code>input_tokens</code> y <code>output_tokens</code> tienen que ser enteros no negativos. Si el proveedor devuelve basura, no puede acabar en la contabilidad.</li>
+<li><strong>Cualquier otra excepción alrededor de la aplicación de la política:</strong> 500 limpio en JSON, nunca la traza en crudo.</li>
+</ul>
+<pre><code class="language-python">try:
+    content_length = int(self.headers.get(&quot;Content-Length&quot;, 0))
+except ValueError:
+    return self._bad_request(&quot;Invalid Content-Length header&quot;)   # resumido: el real escribe la respuesta JSON a mano
+if content_length &lt; 0:
+    return self._bad_request(&quot;Content-Length cannot be negative&quot;)
+
+body = self.rfile.read(content_length)
+try:
+    body_str = body.decode(&quot;utf-8&quot;)
+except UnicodeDecodeError:
+    return self._bad_request(&quot;Invalid UTF-8 in request body&quot;)
+try:
+    data = json.loads(body_str)
+except json.JSONDecodeError:
+    return self._bad_request(&quot;Invalid JSON&quot;)
+if not isinstance(data, dict):
+    return self._bad_request(&quot;Request body must be a JSON object&quot;)
+</code></pre>
+<p><strong>Lección:</strong> cada paso de decodificación tiene su propio tipo de error. Meterlos en un <code>try</code> que solo conoce uno es la forma más habitual de que un 400 acabe siendo una conexión cortada.</p>
+<h2>3. El mock que nunca llegaba</h2>
+<p>Dos tests usaban <code>monkeypatch</code> para simular una respuesta SSE malformada y una excepción genérica, y se quedaban colgados hasta el timeout. El motivo es que el runner corre en un subproceso real (<code>subprocess.Popen</code>) y <code>monkeypatch</code> solo cambia objetos dentro del proceso del test. El subproceso nunca veía el mock y seguía llamando al proveedor real.</p>
+<p>La solución fue no cruzar la frontera del proceso con mocks:</p>
+<ul>
+<li>Para el SSE malformado, el test levanta en su propio proceso un servidor HTTP real que sirve exactamente esa secuencia de eventos, y arranca un runner dedicado apuntando a él.</li>
+<li>Para la excepción genérica, el runner tiene un punto de inyección de fallos explícito, activado por una variable de entorno de test, que lanza la excepción justo antes de aplicar la política.</li>
+</ul>
+<p>Y salió algo más. Con el código real ejercitado por fin, la aserción del test resultó ser incorrecta: un evento SSE malformado se envuelve como error de precondición y el runner devuelve un 403, no el 400 o el 500 que el test suponía. Esa suposición nunca se había comprobado, porque el mock nunca llegaba a ejecutarse.</p>
+<p><strong>Lección:</strong> un mock que no se ejecuta no prueba nada, y la aserción que lo acompaña tampoco. Si el código bajo test vive en otro proceso, simula en la frontera (un servidor falso, una variable de entorno) y no dentro.</p>
+<h2>4. La evidencia del entorno equivocado</h2>
+<p>En un ciclo, el agente que escribía el código entregó un informe con 5 tests fallidos en los tests específicos y 15 en la suite completa, con un análisis intentando justificarlos. El revisor lo rechazó. Los fallos no existían: la captura se había hecho en otro sandbox, contra una copia antigua del paquete instalada en <code>site-packages</code> en lugar del código editable de la rama. Ejecutado en el checkout correcto, todo pasaba.</p>
+<p>Hubo una variante más sutil del mismo problema. El entorno virtual del proyecto no tenía instaladas las herramientas de desarrollo, así que <code>pytest</code> se resolvía por el <code>PATH</code> desde el entorno de otro proyecto. Esa vez el resultado era válido por casualidad, porque los dos entornos apuntaban al mismo código fuente, pero lo dejé anotado.</p>
+<p><strong>Lección:</strong> antes de analizar un fallo, comprueba qué código se está probando y con qué herramientas. Un informe de tests no vale nada si no sabes qué ruta del paquete importó y qué binario lo ejecutó.</p>
+<h2>5. El deadlock que no existía</h2>
+<p>Esta es la que más me gusta. Un test de estrés lanzaba 20 peticiones concurrentes contra el runner y en cada ejecución entre 8 y 14 terminaban en timeout. Con PostgreSQL, bloqueos de filas y concurrencia, la hipótesis obvia era un deadlock. Tan obvia que, en una rama aparte, se llegó a escribir un "arreglo" que reordenaba los bloqueos antes de haber demostrado que el problema existía.</p>
+<p>La investigación de verdad fue por otro lado:</p>
+<ul>
+<li><strong>El monitor de deadlocks no medía nada.</strong> El script que vigilaba PostgreSQL consultaba <code>deadlock_count</code> en <code>pg_stat_database</code>, una columna que no existe (se llama <code>deadlocks</code>). Fallaba en cada ejecución y no se veía porque nadie leía su salida. La otra vigilancia, sobre <code>pg_stat_activity</code>, solo se veía a sí misma.</li>
+<li><strong>Instrumentar el pool sí dio respuestas.</strong> Medí cada <code>engine.connect()</code> en dos ejecuciones de diagnóstico: el tiempo máximo de checkout fue de 27 ms, el pico fue de 12 conexiones de 15 disponibles y toda la actividad del pool terminaba en los primeros 0,34 segundos. Cero menciones de deadlock en todos los logs.</li>
+<li><strong>El cuello de botella estaba fuera.</strong> Todos los errores eran timeouts de lectura de 30 segundos. El proxy que hacía de proveedor (un único proceso) no podía atender 20 streams SSE a la vez dentro de su propio límite de 30 segundos, así que las peticiones se encolaban detrás de él. Las pocas que devolvían 403 lo hacían justo después de unos 31 segundos: era el timeout del upstream convertido en error de política.</li>
+</ul>
+<p>La conclusión quedó escrita con sus límites: no hay deadlock ni en PostgreSQL ni en el pool; el problema es de capacidad del upstream de test. El documento de evidencia enumera también lo que no se verificó: solo se probó con 20 hilos, con la configuración por defecto del pool y siempre contra el proxy, nunca contra el proveedor real. Ajusté el test para distinguir "se cuelga y nunca vuelve" de "es lento porque está en cola", con un timeout del cliente más holgado y el del upstream configurable.</p>
+<p><strong>Lección:</strong> antes de arreglar un deadlock, demuestra que existe, y antes de fiarte de un monitor, comprueba que mide algo. Un monitor roto que no hace ruido es peor que no tener monitor, porque te da una tranquilidad que no te has ganado.</p>
+<h2>6. El trabajo que no se commitea se pierde</h2>
+<p>Al preparar este capítulo me encontré con algo que no esperaba: la rama de trabajo activa del runner no tiene casi nada de lo que cuento en las secciones 2 y 3. Las validaciones, la separación de UTF-8 y JSON, el punto de inyección de fallos... todo eso existe, pero en un commit WIP de una rama aparte, guardado a toda prisa antes de pausar el trabajo. En la rama principal, <code>Content-Length</code> se sigue convirtiendo con un <code>int()</code> sin proteger.</p>
+<p>No es la primera vez. En el registro de tareas de Saturno hay una que dice literalmente "restaurar los guards de <code>_parse_usage</code> y los 8 tests adversariales perdidos en un git reset". El trabajo se hizo, se aprobó, se perdió y hubo que rehacerlo.</p>
+<p>La causa es una decisión de diseño que defiendo y que tiene un coste: Saturno nunca hace commit, porque cerrar un cambio en la historia es decisión mía. El resultado es que el trabajo aprobado se queda en el working tree, sin historia, y cualquier reset, cambio de rama o limpieza se lo lleva por delante. La regla de no hacer commits autónomos está bien. Lo que falta es la otra mitad: que lo aprobado no se quede días esperando a que yo haga el commit.</p>
+<p><strong>Lección:</strong> si tu agente no puede hacer commit (y no debería), el cuello de botella eres tú. El trabajo aprobado tiene que consolidarse pronto, aunque sea en una rama de trabajo o en un parche guardado, o acabará perdido.</p>
+<h2>Lo que me llevo</h2>
+<ol>
+<li><strong>Prueba la propiedad concurrente</strong> (solapamiento), no solo que cada petición sale bien.</li>
+<li><strong>Un tipo de error por paso</strong> de decodificación y validación, y un 500 limpio como red final.</li>
+<li><strong>No cruces procesos con mocks:</strong> simula en la frontera, con servidores falsos o puntos de inyección explícitos.</li>
+<li><strong>Comprueba qué código y qué herramientas</strong> produjeron un informe de tests antes de analizarlo.</li>
+<li><strong>Demuestra el bug antes de arreglarlo</strong>, y verifica que tus monitores miden de verdad.</li>
+<li><strong>Deja escrito lo que no verificaste.</strong> Una conclusión con sus límites vale más que una sin ellos.</li>
+<li><strong>Consolida pronto el trabajo aprobado.</strong> Sin commit no hay historia, y sin historia el trabajo se pierde.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

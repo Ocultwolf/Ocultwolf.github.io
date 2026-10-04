@@ -1,0 +1,157 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Let Neon talk and let someone else do the work | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/separar-conversacion-y-ejecucion/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/separar-conversacion-y-ejecucion/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 30 Sep 2026</p>
+      <h1>Let Neon talk and let someone else do the work</h1>
+      <p class="lead">Neon stopped executing commands and started delegating: a background agent for new tasks and an HTTP bridge to my Claude Code sessions in tmux. The architecture, and what was learned while wiring it up.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Neon · architecture</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>For weeks Neon did everything: it talked to me, decided what I wanted, and also did the work, running shell commands from its own voice turn. It worked, but it had three problems that turned out to be the same one. The voice turn got blocked while a long command ran. Every command output went into the context and was paid for on every following call (the chapter on cost covers how far that can go). And on top of that, I was paying API prices for an expensive model to do tasks that a coding agent, using the subscription I already pay for, does better. Adding the Claude Code subscription, monthly spending was getting close to €80 for a personal project.</p>
+<p>After turning it over for a while, the idea is simple to state: separate the conversation from the execution. Neon only talks, and someone else does the work. In this chapter I explain how I set it up and, above all, the problems that showed up when I connected the pieces.</p>
+<h2>The architecture</h2>
+<pre><code class="language-text">                   ┌──────────────────────────────────────────────┐
+  voz ──► Neon ────┤ dispatch_task ──► task_runner (claude -p)     │──► Telegram
+ (Haiku,           │                    proceso aparte, systemd    │──► aviso en la llamada
+  sin shell)       │                                               │
+                   │ resume_agent_session ──► puente HTTP ──► tmux │──► sesiones de Claude Code
+                   └──────────────────────────────────────────────┘     que ya tengo abiertas
+</code></pre>
+<ul>
+<li><strong>Neon is only the conversational layer.</strong> It runs on Haiku, a cheaper model, and its system prompt says explicitly that its role is to talk to me and that it delegates everything that isn't conversation.</li>
+<li><strong>Neon no longer has a shell.</strong> I removed the tool for running commands, because a model that only converses shouldn't be able to touch the system.</li>
+<li><strong>Two paths for the work:</strong> new tasks, which launch a background agent, or instructions for Claude Code sessions I already have open in tmux, which have their own working context (the trading bot, the blog...).</li>
+</ul>
+<h2>Delegating without blocking the turn</h2>
+<p>When I ask for something that takes several steps ("research this", "fix that"), Neon calls <code>dispatch_task</code>. That tool writes the task to a file, launches the agent as a transient systemd unit, decoupled from Neon's process, and returns a <code>task_id</code> immediately. <code>systemd-run</code> returns as soon as it registers the unit, not when the work finishes, so the voice turn stays free and I can keep talking.</p>
+<pre><code class="language-python">proc = await asyncio.create_subprocess_exec(
+    &quot;/usr/bin/systemd-run&quot;, &quot;--user&quot;, f&quot;--unit=neon-task-{task_id}&quot;,
+    &quot;/usr/bin/python3&quot;, str(RUNNER_SCRIPT), task_id, str(task_file), str(status_file), project_path,
+)
+</code></pre>
+<p>The background agent is <code>claude -p</code> in autonomous mode, using my subscription session and not the API. It has a one-hour timeout and it's the only real path to the machine: if root is needed, it goes through one specific wrapper script that sudoers allows, and nothing else. Back when Neon ran commands itself, it asked me for spoken confirmation before doing anything destructive. In the background there's nobody listening to confirm anything, so I moved those rules into the background agent's prompt: don't claim something was done if it wasn't, and never take irreversible actions without permission.</p>
+<p>The result is capped at 2,000 characters, and the agent writes it already meant to be read aloud: no markdown, no tables, no unnecessary jargon. When it finishes, it notifies me through two channels at once. One is a direct Telegram message, which doesn't spend a single Neon token. The other is a marker on disk that Neon checks while a call is open, so it can tell me about it with the polite check-in from the Neon chapter.</p>
+<p><strong>Lesson:</strong> if a conversational agent has to wait for the work to finish, it isn't conversational. Delegation has to hand control back immediately and notify afterwards through a channel that doesn't cost conversation.</p>
+<h2>The bridge to the tmux sessions</h2>
+<p>The second path is the more interesting one. I work with several Claude Code sessions open in tmux, each with its own context: one for the trading bot, another for the blog, another for Neon's development... What I wanted was to tell Neon "tell the trader session to look at such-and-such" and have the instruction arrive there, without Neon doing the work itself. What Neon pays for is a cheap HTTP call; the real work is paid for by the other session, which is already running on the subscription.</p>
+<p>The complication came from where each piece lives. I set up a copy of Neon inside an Incus container to try the new architecture without touching the original, but my sessions have to stay on the host because they depend on things on the host. The container is unprivileged and remaps UIDs: a process that is called <code>neon</code> inside is, to the host, a different unprivileged UID, and it can't open my user's tmux socket. The simplest way to cross that boundary was a small HTTP service, authenticated with a token, that runs natively on the host and that the container calls over the Incus bridge network.</p>
+<p>Building it taught me several things.</p>
+<h3>The Enter that only added a line break</h3>
+<p>The first test seemed to work: Neon opened the session, the message appeared typed into Claude Code's input box... and stayed there. Enter only added a line break. When I sent the text and the Enter in the same <code>tmux send-keys</code> call, or too close together, Claude Code's interface interpreted the whole burst as a paste. The standard fix is to split them into two calls with a real pause in between, so the text registers as typed before the Enter arrives as a separate keypress.</p>
+<pre><code class="language-python">subprocess.run([&quot;tmux&quot;, &quot;-S&quot;, TMUX_SOCKET, &quot;send-keys&quot;, &quot;-t&quot;, session, text], timeout=10)
+await asyncio.sleep(0.3)   # que el TUI registre el texto como tecleado
+subprocess.run([&quot;tmux&quot;, &quot;-S&quot;, TMUX_SOCKET, &quot;send-keys&quot;, &quot;-t&quot;, session, &quot;Enter&quot;], timeout=10)
+</code></pre>
+<h3>An API, not a screen</h3>
+<p>The first version gave Neon the raw dump of the tmux screen and asked it to summarize what it saw. Bad idea, for two reasons. It burned tokens interpreting borders, keyboard shortcuts and spinners that mean nothing when read aloud. And, worse, it pushed Neon into doing the work itself instead of just passing on the message, exactly what I was trying to avoid, spending API money on something that has nothing to do with being a voice assistant. I replaced it with a proper API: <code>/send</code> sends the message and <code>/reply</code> returns a clean answer or "still working". The screen parsing happens once, in the bridge, and Neon never sees tmux.</p>
+<h3>Knowing where the answer starts</h3>
+<p>To know which part of the screen is the answer, the bridge stored how many lines there were when the message was sent and compared that with a later capture. That isn't reliable: two separate <code>capture-pane</code> captures don't have to match in line count. I confirmed it with a real failure in a test where the answer "LISTO" was already on screen and <code>/reply</code> kept saying "working". Now the bridge anchors on the text that was sent, looking for it in the new capture, instead of on a remembered number.</p>
+<h3>Less clever, more correct</h3>
+<p>To keep only "the answer", the bridge filtered for lines starting with the <code>●</code> marker that Claude Code uses. With one-line answers ("PERFECTO") it worked, but in a multi-paragraph answer the marker only appears on the first line of each paragraph, and the rest was silently lost: long answers arrived empty or cut off. Now <code>/reply</code> returns the whole block between the sent message and the end marker. It's less clever and more correct. And I added <code>/history</code> to pull the session's full history, instead of having the bridge guess how much context is enough.</p>
+<h3>The list that had to be maintained by hand</h3>
+<p>At first the bridge had a fixed list of valid sessions. Every time I created a new session, Neon told me I had to add it to its list. The first fix made the check dynamic in the bridge, but I forgot that Neon's tool had its own fixed list in the schema, so the model couldn't even name a new session. Now the bridge is the single source of truth: any tmux session that is running <code>claude</code> is valid, and it's checked on every call.</p>
+<p><strong>Lesson:</strong> at a boundary between systems, every copy of the same rule (a list of sessions, a response format) is one more place where it can go stale. Put it on one side and have the other side ask.</p>
+<h2>What's still pending</h2>
+<p>Not everything is finished. The full idea includes letting the background agent switch engines dynamically, from Claude Code to Kimi Code, when it hits my account's session limit. The first test with Kimi Code never got as far as evaluating anything: it started in manual approval mode (asking permission for every <code>ls</code>), and once I sorted that out, the Kimi Code product's gateway cut the task off at a limit of 3 requests per minute before it touched any code. The automatic engine switch is already written, right at the point where the agent detects the session limit, but until I have Kimi paid for and logged in, it fails silently and the task ends with the usual limit error.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>Separate conversation from execution.</strong> The model that talks to you doesn't have to be the one that works, or the most expensive one.</li>
+<li><strong>Take the hands off the one that converses.</strong> A model that only converses shouldn't be able to touch the system; access to the machine goes through a single path.</li>
+<li><strong>Delegating means handing control back immediately</strong> and notifying afterwards through a cheap channel.</li>
+<li><strong>Give the agent an API, not a screen.</strong> If you give it raw information it has to interpret, it will end up doing the work itself.</li>
+<li><strong>At boundaries, a single source of truth</strong>, and solid anchors (the sent text) instead of fragile assumptions (a line count).</li>
+<li><strong>Less clever, more correct:</strong> clever filters fail silently on the cases you didn't see.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

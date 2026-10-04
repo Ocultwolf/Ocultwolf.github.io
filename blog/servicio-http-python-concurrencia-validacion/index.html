@@ -1,0 +1,190 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>A Python HTTP service under pressure: concurrency, validation, and the deadlock that wasn&#x27;t | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/servicio-http-python-concurrencia-validacion/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/servicio-http-python-concurrencia-validacion/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 20 Sep 2026</p>
+      <h1>A Python HTTP service under pressure: concurrency, validation, and the deadlock that wasn&#x27;t</h1>
+      <p class="lead">A small HTTP runner that enforces token budgets taught me more about robustness than almost anything else: concurrency, layered validation, mocks that miss their target, a deadlock that didn&#x27;t exist, and approved work that got lost.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>JARVIS-PD · robustness</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>Inside JARVIS-PD, my agent-system project, there's a small but critical piece: an HTTP runner that sits in front of every model call and enforces a token budget before letting it through. It's a few hundred lines, and it still taught me more about robustness than almost any other part of the system. Agents did part of the work (Codex writing, Claude reviewing), so this chapter is also about something less obvious: how people fool themselves with evidence, whether they're human or agent.</p>
+<h2>What the runner does</h2>
+<p>It's a policy enforcement point. It receives a request, validates it, counts the input tokens locally, reserves the invocation in PostgreSQL with an idempotency key, calls the provider with streaming (SSE) and, when it finishes, compares actual usage against what it had estimated. If the difference exceeds the policy's tolerance, it persistently blocks that version of the policy until someone reviews it.</p>
+<pre><code class="language-text">POST ──► validar ──► contar tokens ──► reservar en Postgres ──► llamar al proveedor (SSE)
+                                         (idempotencia +             │
+                                          política no bloqueada)     ▼
+                                                           comparar uso real vs estimado
+                                                           └─ desvío &gt; tolerancia ──► bloquear política
+</code></pre>
+<p>The reservation locks the policy's state row and that invocation's idempotency row with <code>SELECT ... FOR UPDATE</code>, in that order and inside the same transaction. That way two concurrent requests can't reuse the same key or slip through a policy that has just been blocked.</p>
+<h2>1. The server that handled one request at a time</h2>
+<p>The first version used <code>HTTPServer</code> from the standard library, which handles requests one at a time. While one request waited for the provider's response, which can take tens of seconds, all the others queued up. I fixed it by switching to <code>ThreadingHTTPServer</code>, with an orderly shutdown: on SIGTERM or SIGINT it calls <code>shutdown()</code>, which stops accepting new requests and lets the in-flight ones finish.</p>
+<pre><code class="language-python">httpd = ThreadingHTTPServer(server_address, TokenEnforcementHandler)
+
+if threading.current_thread() is threading.main_thread():
+    def signal_handler(signum, frame):
+        httpd.shutdown()
+    signal.signal(signal.SIGTERM, signal_handler)
+</code></pre>
+<p>The test that proves it doesn't check that the two requests "work", but that their time windows overlap. That's the property that really matters: that one doesn't wait for the other.</p>
+<p><strong>Lesson:</strong> to test concurrency, check the concurrent property (that there is overlap) and not just that each request succeeds on its own. A sequential server passes that second test without any trouble.</p>
+<h2>2. Validating input in layers</h2>
+<p>A service that sits in front of something expensive has to reject anything invalid early and cleanly. The cases showed up one by one, several of them caught by Saturno's autonomous planner (and, as I explain in section 6, not all of them are still on the main branch):</p>
+<ul>
+<li><strong>Non-numeric or negative <code>Content-Length</code>:</strong> a 400, not an exception.</li>
+<li><strong>Body with invalid UTF-8:</strong> decoding and JSON parsing were in the same <code>try</code>, which only caught <code>JSONDecodeError</code>. A <code>UnicodeDecodeError</code> slipped through and dropped the connection instead of returning a 400. I fixed it by splitting them into two blocks, each with its own error.</li>
+<li><strong>Valid JSON that isn't an object</strong> (a list, a number): a clean 400, instead of failing later when accessing a field.</li>
+<li><strong>Usage returned by the provider:</strong> <code>input_tokens</code> and <code>output_tokens</code> must be non-negative integers. If the provider returns garbage, it can't be allowed into the accounting.</li>
+<li><strong>Any other exception around applying the policy:</strong> a clean 500 in JSON, never the raw stack trace.</li>
+</ul>
+<pre><code class="language-python">try:
+    content_length = int(self.headers.get(&quot;Content-Length&quot;, 0))
+except ValueError:
+    return self._bad_request(&quot;Invalid Content-Length header&quot;)   # resumido: el real escribe la respuesta JSON a mano
+if content_length &lt; 0:
+    return self._bad_request(&quot;Content-Length cannot be negative&quot;)
+
+body = self.rfile.read(content_length)
+try:
+    body_str = body.decode(&quot;utf-8&quot;)
+except UnicodeDecodeError:
+    return self._bad_request(&quot;Invalid UTF-8 in request body&quot;)
+try:
+    data = json.loads(body_str)
+except json.JSONDecodeError:
+    return self._bad_request(&quot;Invalid JSON&quot;)
+if not isinstance(data, dict):
+    return self._bad_request(&quot;Request body must be a JSON object&quot;)
+</code></pre>
+<p><strong>Lesson:</strong> every decoding step has its own error type. Putting them in a <code>try</code> that only knows one of them is the most common way for a 400 to end up as a dropped connection.</p>
+<h2>3. The mock that never ran</h2>
+<p>Two tests used <code>monkeypatch</code> to simulate a malformed SSE response and a generic exception, and they hung until the timeout. The reason is that the runner runs in a real subprocess (<code>subprocess.Popen</code>) and <code>monkeypatch</code> only changes objects inside the test's own process. The subprocess never saw the mock and kept calling the real provider.</p>
+<p>The fix was to stop crossing the process boundary with mocks:</p>
+<ul>
+<li>For the malformed SSE, the test starts a real HTTP server in its own process that serves exactly that sequence of events, and launches a dedicated runner pointing at it.</li>
+<li>For the generic exception, the runner has an explicit fault-injection point, enabled by a test environment variable, that raises the exception right before applying the policy.</li>
+</ul>
+<p>And something else came out of it. With the real code finally exercised, the test's assertion turned out to be wrong: a malformed SSE event is wrapped as a precondition error and the runner returns a 403, not the 400 or 500 the test assumed. That assumption had never been checked, because the mock never actually ran.</p>
+<p><strong>Lesson:</strong> a mock that doesn't run proves nothing, and neither does the assertion that goes with it. If the code under test lives in another process, simulate at the boundary (a fake server, an environment variable) and not inside it.</p>
+<h2>4. Evidence from the wrong environment</h2>
+<p>In one cycle, the agent writing the code delivered a report with 5 failing tests in the targeted tests and 15 in the full suite, with an analysis trying to justify them. The reviewer rejected it. The failures didn't exist: the capture had been made in a different sandbox, against an old copy of the package installed in <code>site-packages</code> instead of the branch's editable code. Run in the right checkout, everything passed.</p>
+<p>There was a subtler variant of the same problem. The project's virtual environment didn't have the development tools installed, so <code>pytest</code> was being resolved through the <code>PATH</code> from another project's environment. That time the result was valid by luck, because both environments pointed to the same source code, but I made a note of it.</p>
+<p><strong>Lesson:</strong> before analyzing a failure, check which code is being tested and with which tools. A test report is worthless if you don't know which package path was imported and which binary ran it.</p>
+<h2>5. The deadlock that didn't exist</h2>
+<p>This is the one I like most. A stress test fired 20 concurrent requests at the runner and on every run between 8 and 14 of them ended in a timeout. With PostgreSQL, row locks and concurrency, the obvious hypothesis was a deadlock. So obvious that, on a separate branch, someone went as far as writing a "fix" that reordered the locks before it had been shown that the problem existed.</p>
+<p>The real investigation went another way:</p>
+<ul>
+<li><strong>The deadlock monitor wasn't measuring anything.</strong> The script watching PostgreSQL queried <code>deadlock_count</code> in <code>pg_stat_database</code>, a column that doesn't exist (it's called <code>deadlocks</code>). It failed on every run and nobody noticed because nobody read its output. The other check, on <code>pg_stat_activity</code>, only ever saw itself.</li>
+<li><strong>Instrumenting the pool did give answers.</strong> I timed every <code>engine.connect()</code> in two diagnostic runs: the maximum checkout time was 27 ms, the peak was 12 connections out of 15 available, and all pool activity finished within the first 0.34 seconds. Zero mentions of deadlock in all the logs.</li>
+<li><strong>The bottleneck was outside.</strong> Every error was a 30-second read timeout. The proxy standing in for the provider (a single process) couldn't serve 20 SSE streams at once within its own 30-second limit, so the requests queued up behind it. The few that returned 403 did so just after about 31 seconds: it was the upstream timeout turned into a policy error.</li>
+</ul>
+<p>The conclusion was written down with its limits: there is no deadlock in either PostgreSQL or the pool; the problem is the capacity of the test upstream. The evidence document also lists what wasn't verified: it was only tested with 20 threads, with the default pool configuration, and always against the proxy, never against the real provider. I adjusted the test to tell apart "it hangs and never comes back" from "it's slow because it's queued", with a more generous client timeout and a configurable upstream one.</p>
+<p><strong>Lesson:</strong> before fixing a deadlock, prove it exists, and before trusting a monitor, check that it measures something. A broken monitor that makes no noise is worse than having no monitor, because it gives you a peace of mind you haven't earned.</p>
+<h2>6. Work that isn't committed gets lost</h2>
+<p>While preparing this chapter I ran into something I didn't expect: the runner's active working branch has almost none of what I describe in sections 2 and 3. The validations, the UTF-8/JSON split, the fault-injection point... all of it exists, but in a WIP commit on a separate branch, saved in a hurry before pausing the work. On the main branch, <code>Content-Length</code> is still converted with an unguarded <code>int()</code>.</p>
+<p>It's not the first time. In Saturno's task log there's one that literally says "restore the <code>_parse_usage</code> guards and the 8 adversarial tests lost in a git reset". The work was done, approved, lost, and had to be redone.</p>
+<p>The cause is a design decision that I defend and that has a cost: Saturno never commits, because closing a change into history is my decision. The result is that approved work sits in the working tree, with no history, and any reset, branch switch or cleanup takes it with it. The rule against autonomous commits is fine. What's missing is the other half: approved work shouldn't sit for days waiting for me to commit it.</p>
+<p><strong>Lesson:</strong> if your agent can't commit (and it shouldn't), you are the bottleneck. Approved work has to be consolidated early, even if only on a working branch or in a saved patch, or it will end up lost.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>Test the concurrent property</strong> (overlap), not just that each request succeeds.</li>
+<li><strong>One error type per step</strong> of decoding and validation, and a clean 500 as the final safety net.</li>
+<li><strong>Don't cross processes with mocks:</strong> simulate at the boundary, with fake servers or explicit injection points.</li>
+<li><strong>Check which code and which tools</strong> produced a test report before analyzing it.</li>
+<li><strong>Prove the bug before fixing it</strong>, and verify that your monitors actually measure something.</li>
+<li><strong>Write down what you didn't verify.</strong> A conclusion with its limits is worth more than one without them.</li>
+<li><strong>Consolidate approved work early.</strong> Without a commit there's no history, and without history the work gets lost.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

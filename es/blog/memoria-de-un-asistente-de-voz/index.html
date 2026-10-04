@@ -1,0 +1,149 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>La memoria de un asistente de voz: qué recordar, dónde y cómo admitir que has olvidado | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/memoria-de-un-asistente-de-voz/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/memoria-de-un-asistente-de-voz/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 30 Sep 2026</p>
+      <h1>La memoria de un asistente de voz: qué recordar, dónde y cómo admitir que has olvidado</h1>
+      <p class="lead">La memoria de un asistente no es una sola cosa: son cinco capas con duraciones, costes y fallos distintos. Cada &quot;ha perdido memoria&quot; que diagnostiqué venía de una capa diferente.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Neon · memoria</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>"Neon ha perdido memoria" fue una de las quejas que más repetí mientras lo construía. Cada vez que me puse a investigar, la causa era distinta. La memoria de un asistente no es una sola cosa: son varias capas, con duraciones, costes y formas de fallar diferentes. En este capítulo las recorro una a una, con el fallo concreto que me enseñó cada una.</p>
+<h2>Capa 1: la conversación que sobrevive a reconexiones</h2>
+<p>Por defecto, cada conexión de Neon arrancaba con el contexto vacío, así que cada reconexión era como hablar con un desconocido que se presenta otra vez. Yo quería una sola conversación continua, aunque apagara y encendiera. La solución es sencilla: al desconectar se guarda el historial en disco, por usuario, y al conectar se carga. Si ya hay historial, Neon no saluda; espera a que hable yo.</p>
+<pre><code class="language-python">MAX_MESSAGES = 300
+
+def save_history(messages: list[dict], username: str | None = None) -&gt; None:
+    path = _history_path(username)
+    trimmed = messages[-MAX_MESSAGES:]
+    path.write_text(json.dumps(trimmed, ensure_ascii=False, indent=2), encoding=&quot;utf-8&quot;)
+</code></pre>
+<p>El historial tiene un límite para que no crezca sin fin, y ahí apareció el primer fallo. Al principio el límite era de 80 mensajes, y Neon "perdía memoria" dentro de una misma tarde de trabajo. No es que no tuviera acceso a nada. Es que cada vez que ejecutaba un comando gastaba al menos dos mensajes (la llamada y su resultado), así que los 80 se agotaban rapidísimo y la conversación real se recortaba. Lo subí a 300.</p>
+<p>El nombre de usuario que decide qué archivo se carga pasa por una expresión regular estricta antes de convertirse en ruta. Es el mismo patrón que se valida al registrarse, de modo que un nombre manipulado no puede usarse para escribir fuera del directorio.</p>
+<p><strong>Lección:</strong> en un agente con herramientas, un límite de memoria medido en mensajes no mide la conversación. Las herramientas se comen la ventana mucho antes que las palabras.</p>
+<h2>Capa 2: saber decir "eso ya no lo tengo"</h2>
+<p>Ese mismo día descubrí algo más importante que el límite. Cuando le preguntaba por algo que ya se había recortado, Neon me decía que no tenía acceso, o directamente actuaba como si aquello nunca hubiera existido. Las dos respuestas son peores que la verdad. Ahora sabe dónde vive su memoria y qué decir cuando algo antiguo ya no está: que se perdió por el límite de historial, sin inventar que nunca existió.</p>
+<p><strong>Lección:</strong> un asistente con memoria finita tiene que conocer sus propios límites y decirlo. "Lo he olvidado porque tengo un tope" genera confianza; "no tengo acceso" o una invención la destruyen.</p>
+<h2>Capa 3: lo podado se archiva, no se borra</h2>
+<p>En el capítulo sobre el coste conté cómo Neon poda del contexto las salidas de herramientas que ya no hacen falta. Esa poda es permanente, para no romper la caché, pero que algo no haga falta para la petición de ahora no significa que no vaya a hacer falta nunca. Así que, antes de sustituir un resultado por un marcador, el contenido original se guarda en un archivo de solo añadir, por usuario, y el marcador lleva su identificador:</p>
+<pre><code class="language-text">[resultado de comando anterior omitido para ahorrar contexto -- ... Si más adelante hace falta
+de verdad, se puede recuperar con la tool recall_pruned_context, archive_id=&quot;...&quot;]
+</code></pre>
+<p>Recuperarlo es una búsqueda por identificador, sin volver a consultar al modelo que decidió podarlo. El archivo es de solo añadir porque las entradas nunca se editan, solo se consultan. Y respeta la misma separación por usuario que el historial: un identificador de otro usuario simplemente no se encuentra.</p>
+<p><strong>Lección:</strong> cuando reduces el contexto para ahorrar, deja siempre un camino de vuelta. El marcador tiene que decir qué falta y cómo recuperarlo, no solo que falta algo.</p>
+<h2>Capa 4: la memoria de trabajo vive en otro sitio</h2>
+<p>Buena parte de "lo que Neon sabe" sobre mis proyectos no está en Neon, sino en mis sesiones de Claude Code, cada una con su propio contexto de trabajo. Por eso Neon tiene herramientas para listar esas sesiones, leer su historial y mandarles instrucciones, todo a través del puente HTTP que conté en el capítulo sobre separar la conversación del trabajo. En vez de copiar la memoria de cada proyecto dentro de Neon, la consulta donde ya está.</p>
+<p>Esto también tiene su forma de fallar. Un día quise recuperar una sesión que había renombrado como "blog" y que daba por perdida. La busqué en la carpeta del proyecto y encontré unas 90 sesiones, todas ejecuciones automáticas del generador de posts, ninguna de más de 35 líneas. El nombre de una sesión de tmux no tiene por qué coincidir con la carpeta donde vive la conversación de Claude dentro de ella, así que buscar por carpeta no la encontraba. Hay que buscar por contenido.</p>
+<p><strong>Lección:</strong> consultar la memoria donde ya vive es mejor que duplicarla, pero hace falta un índice fiable de dónde está cada cosa. Los nombres que ponemos las personas (de sesiones, de ventanas) no son ese índice.</p>
+<h2>Capa 5: conocimiento que no es conversación</h2>
+<p>La última capa son mis notas: un vault de Obsidian con guías, referencias y apuntes. Quería que mis bots pudieran navegarlo y no solo yo desde la aplicación. Neon tiene acceso de solo lectura (listar notas, buscar por palabras y leer una nota) a través del mismo puente, porque el vault vive en el host y Neon corre en un contenedor.</p>
+<p>Tomé dos decisiones a propósito. La primera, <strong>solo lectura</strong>: si hay que guardar algo en el vault, lo hace una sesión de Claude Code con su propia skill, no el asistente de voz. La segunda, <strong>búsqueda por palabras, no vectorial</strong>: ahora mismo el vault tiene un puñado de notas, y montar embeddings para eso sería resolver un problema que todavía no tengo. Cuando haya contenido suficiente para que la búsqueda por palabras se quede corta, será el momento.</p>
+<p><strong>Lección:</strong> no montes un sistema de recuperación más complejo que el volumen de conocimiento que tienes. Empieza por lo simple y deja apuntado cuándo deja de bastar.</p>
+<h2>Un caso aparte: la instrucción que no se aplicaba</h2>
+<p>Le pedí a Neon que a partir de entonces respondiera corto, sin explicaciones salvo que se las pidiera, y que lo recordara siempre. No había manera. Al investigarlo vi que Neon sí se había editado su propio prompt para guardarlo, dos veces, y las dos ediciones se pisaban a medias. Pero el proceso en marcha seguía con el prompt viejo cargado en memoria: el cambio solo se aplicaría al reiniciar, y Neon no podía reiniciarse a sí mismo sin cortarme la llamada. Lo dejé en una única instrucción limpia y reinicié el servicio.</p>
+<p><strong>Lección:</strong> que un agente pueda modificar su propia configuración no significa que el cambio esté activo. Distingue entre lo que se guarda en disco y lo que el proceso tiene cargado, y dile al agente cuál de las dos ha cambiado.</p>
+<h2>Una advertencia sobre probar la memoria</h2>
+<p>Al separar la memoria por usuario, la prueba consistía en crear un usuario de prueba y comprobar que su historial no se mezclaba con el mío. Durante esa prueba se sobrescribió por accidente mi archivo de historial real. Lo restauré desde una copia antes de seguir, pero la lección es clara: los tests de persistencia se hacen sobre rutas aisladas, nunca sobre el mismo directorio donde vive la memoria de verdad.</p>
+<h2>Lo que me llevo</h2>
+<ol>
+<li><strong>La memoria son capas</strong>, y cada "ha perdido memoria" viene de una distinta: diagnostica cuál es antes de tocar nada.</li>
+<li><strong>Mide los límites en contenido, no en mensajes</strong>, si hay herramientas de por medio.</li>
+<li><strong>Enséñale al agente a admitir que ha olvidado</strong>, y a decir por qué.</li>
+<li><strong>Lo podado se archiva</strong>, y el marcador explica cómo recuperarlo.</li>
+<li><strong>Consulta la memoria donde ya vive</strong>, con un índice fiable y no con nombres humanos.</li>
+<li><strong>Recuperación tan simple como permita el volumen</strong>: palabras antes que vectores.</li>
+<li><strong>Guardado no es aplicado:</strong> los cambios de configuración de un agente necesitan saber cuándo entran en vigor.</li>
+<li><strong>Los tests de memoria, sobre rutas aisladas.</strong></li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>12 millones de tokens en una tarde: cómo controlar el coste de un agente con herramientas | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/controlar-el-coste-de-un-agente-con-herramientas/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/controlar-el-coste-de-un-agente-con-herramientas/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 24 Sep 2026</p>
+      <h1>12 millones de tokens en una tarde: cómo controlar el coste de un agente con herramientas</h1>
+      <p class="lead">Una sesión de Neon consumió 12 millones de tokens sin caché, y un error de unidades la convirtió en un susto de 2.400 $. Qué pasó de verdad y las cuatro protecciones que sirven para cualquier agente con herramientas.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Neon · coste</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>El 19 de septiembre tuve una conversación larga con Neon, mi asistente de voz, revisando el estado de Saturno. Nada raro: le preguntaba cómo iban las tareas y él ejecutaba comandos para mirarlo. Unos días después, el informe de costes de Anthropic decía que esa sesión había costado unos 2.435 $. Este capítulo cuenta qué pasó de verdad, y son dos cosas muy distintas: un fallo técnico real que hay que entender y un fallo de medición que convirtió unos 24 $ en un susto de dos mil. Sobre todo cuenta las protecciones que monté después, porque valen para cualquier agente con herramientas.</p>
+<h2>Qué pasó realmente</h2>
+<p>Lo primero era descartar lo peor: ¿había entrado alguien por el túnel? En la ventana del incidente hubo cuatro conexiones WebRTC, seguidas y no simultáneas, todas desde mi IP y por el mismo relay TURN que tengo configurado. La conversación transcrita era la mía. No había nadie más.</p>
+<p>Lo segundo fue el volumen. Crucé los logs con el informe de uso de Anthropic (que da tokens, no dinero) y salió esto:</p>
+<ul>
+<li><strong>256 llamadas</strong> a la API en toda la ventana, sin errores ni reintentos escondidos.</li>
+<li><strong>Unos 12 millones de tokens de entrada</strong>, unos 8,86 millones solo en la hora pico.</li>
+<li><strong>Unos 47.000 tokens por llamada de media.</strong> No eran miles de llamaditas: eran pocas llamadas, cada una con un contexto enorme.</li>
+<li><strong>Caché a cero.</strong> <code>cache_creation</code> y <code>cache_read</code> en cero durante toda la hora pico.</li>
+</ul>
+<p>Una vez visto, el mecanismo es obvio. Neon ejecutaba comandos de shell para consultar a Saturno (volcados de journalctl, consultas a SQLite) y cada salida entraba entera en el contexto. Cada reconexión recargaba el historial acumulado. Y sin caché, cada una de esas 256 llamadas volvía a pagar desde cero el system prompt, todo el historial y todas las salidas de comandos acumuladas hasta ese momento. Con herramientas activas el contexto crece en cada turno, y el coste de cada llamada crece con él: el gasto total no sube de forma lineal con la conversación, sino mucho más rápido.</p>
+<h2>El error de medición: 2.435 $ que eran 24 $</h2>
+<p>Durante días trabajé con la cifra de 2.435 $. Hasta que un día puse 10 $ en la cuenta, que estaba en −0,69 $, y al día siguiente me quedaban 7,76 $. El consumo real había sido de 1,55 $. El informe de costes de la API decía 156,09 para ese mismo día.</p>
+<p>156,09 entre 100 es 1,56. El campo de importe del Cost Report no viene en dólares sino en céntimos, y lo estábamos leyendo como dólares sin más. Aplicado al día del incidente, los 2.435 $ eran unos 24 $, lo que además encajaba con que la cuenta hubiera terminado en −0,69 $ y no con una deuda de miles.</p>
+<p>Lo que sí seguía siendo válido es lo importante. Todo el diagnóstico técnico lo había hecho con recuentos de tokens del informe de uso, no con importes, así que los 12 millones de tokens y la caché a cero eran reales. Lo que estaba mal era la traducción a dinero.</p>
+<p><strong>Lección:</strong> antes de reaccionar a una cifra de coste, crúzala con algo que no venga de la misma fuente; en mi caso, el saldo real de la cuenta. Y mide los agentes en tokens, que es la unidad que de verdad controlas. Los dólares son una conversión, y las conversiones se rompen.</p>
+<p>Que fueran 24 $ y no 2.400 $ no cambia la conclusión. El mismo mecanismo, con una conversación más larga o un modelo más caro, escala sin techo. Lo tengo claro desde el incidente: que no se vuelva a disparar importa más que que el bot esté siempre disponible.</p>
+<h2>Protección 1: una caché de prompts que funcione de verdad</h2>
+<p>Lo primero fue activar el cacheo de prompts, que en Pipecat se hace con una opción del servicio de Anthropic. Pero esa opción solo marca para caché los mensajes de usuario, no el system prompt, que es largo. Así que el system prompt va cacheado aparte, con una caché de una hora: en una conversación de voz hay pausas largas que harían caducar la caché por defecto de 5 minutos.</p>
+<p>Los números lo dicen: una sesión normal, con muchas herramientas y ya con los cambios, el 23 de septiembre tuvo unos 24 tokens de entrada sin caché y unos 477.000 servidos desde caché.</p>
+<h2>Protección 2: podar el contexto preguntando "¿sigue bastando?"</h2>
+<p>La caché abarata repetir el contexto, pero no evita que crezca. Para eso hacía falta quitar lo que ya no sirve, sobre todo salidas de comandos viejas. La primera idea fue preguntarle a un modelo, elemento por elemento, "¿esto sigue siendo relevante?". El problema es que la memoria de trabajo no funciona así: dos cosas que por separado parecen prescindibles pueden hacer falta juntas.</p>
+<p>Así que le di la vuelta y cambié el diseño a una sola pregunta, hecha de forma global: "si quito esto, ¿el contexto sigue bastando para lo que se está pidiendo ahora?". Se prueba con cada salida de herramienta antigua, de la más vieja a la más nueva. Si sigue bastando, se queda fuera; si no, se restaura. Es literalmente delta debugging (el algoritmo ddmin de Zeller, que se usa para minimizar casos de prueba), pero aplicado al contexto de un LLM.</p>
+<pre><code class="language-python">for i in new_candidates[:max_attempts]:
+    original = messages[i][&quot;content&quot;]
+    messages[i][&quot;content&quot;] = PRUNE_PLACEHOLDER_PREFIX       # lo quito para probar
+    sufficient = await is_context_sufficient(last_user_text, _render_for_jev(messages))
+    if sufficient is None:                                  # el juez no responde:
+        messages[i][&quot;content&quot;] = original                   # restauro y no adivino
+        break
+    decisions[i] = bool(sufficient)
+    if sufficient:
+        archive_id = archive_pruned(username, original)     # se archiva, no se pierde
+        messages[i][&quot;content&quot;] = _prune_placeholder(archive_id)
+    else:
+        messages[i][&quot;content&quot;] = original
+</code></pre>
+<p>El juez es Jev, un modelo pequeño y muy barato, al que llego a través de OpenRouter. Hay varios detalles que salieron de problemas reales:</p>
+<ul>
+<li><strong>Nunca se tocan los 4 mensajes más recientes</strong>, ni se evalúan salidas de menos de 200 caracteres: no compensa la llamada.</li>
+<li><strong>Las decisiones se memorizan por sesión.</strong> Sin eso, como la ventana protegida se va desplazando, se volvía a preguntar por los mismos candidatos en cada turno, lo que añadía unos 3,6 segundos de llamadas secuenciales a Jev por turno para obtener casi siempre la misma respuesta.</li>
+<li><strong>Lo podado no se pierde.</strong> El contenido original se archiva y en su lugar queda un marcador con un <code>archive_id</code>. Si más adelante hace falta, Neon tiene una herramienta para recuperarlo. Que algo no haga falta para esta petición no significa que no vaya a hacer falta nunca.</li>
+<li><strong>Si Jev no responde, se conserva todo.</strong> Ante la duda, mejor más contexto que menos.</li>
+</ul>
+<h3>El bug que anulaba la poda sin dar errores</h3>
+<p>Durante un tiempo la poda casi nunca quitaba nada, y no fallaba nada, que es lo que lo hacía raro. El cliente de Jev recortaba el contexto a 8.000 caracteres quedándose con el final. Pero una conversación de 40 mensajes ya ocupaba más de 11.000 caracteres, y el final es justo donde no están los candidatos, porque los candidatos son lo más antiguo. Jev estaba juzgando si el contexto bastaba sin un elemento sobre una vista que ni siquiera lo contenía. Lo arreglé subiendo el límite a 60.000 caracteres y, si hay que recortar, quedándome con el principio y el final, nunca solo con el final.</p>
+<h3>Poda y caché se pelean si no tienes cuidado</h3>
+<p>El primer diseño construía en cada turno una copia podada del contexto para enviarla. Reducía tokens, pero rompía la caché: la caché de Anthropic necesita que el prefijo sea idéntico byte a byte, y una copia distinta en cada llamada obligaba a reescribirla. Medido el mismo día, una llamada podada leía 4.399 tokens de caché y escribía 28.452 nuevos.</p>
+<p>La solución fue colapsar los mensajes de forma permanente, en el propio contexto, la primera vez que se confirma que sobran. Así cada mensaje cambia una sola vez y, a partir de ahí, todas las llamadas reutilizan exactamente el mismo contenido, de modo que la caché se lee barata en vez de reescribirse. Solo un candidato nuevo provoca una reescritura puntual.</p>
+<p><strong>Lección:</strong> cualquier optimización que cambie el contenido del prompt entre llamadas compite con la caché. Haz los cambios una sola vez y que sean definitivos, no en cada llamada.</p>
+<h2>Protección 3: frenos que fallan cerrados</h2>
+<p>La caché y la poda reducen el coste normal, pero no protegen de un bucle. Para eso hay tres frenos independientes en la subclase del servicio LLM, y todos fallan hacia "corto la sesión", nunca hacia "sigo, aunque sea peor":</p>
+<ol>
+<li><strong>Presupuesto de tokens por sesión.</strong> Una estimación (caracteres entre 4) acumulada por sesión, con un techo de unos 750.000 tokens, que según el modelo son unos pocos dólares. Si se supera, la sesión termina. No se salta llamadas ni se queda colgada: termina.</li>
+<li><strong>Limitador de ritmo.</strong> Más de 15 llamadas al LLM en 60 segundos cortan la sesión al instante, sea cual sea el tamaño de cada llamada. Es la firma exacta del incidente (ráfagas de varias llamadas en pocos segundos, sostenidas durante más de una hora), y un presupuesto de tokens tarda en detectar un bucle de muchas llamadas pequeñas.</li>
+<li><strong>Modo degradado.</strong> Si Jev deja de responder, ya no se puede podar y el contexto crecerá más rápido por llamada. Lo seguro es bajar el techo a 150.000 tokens para el resto de la sesión, no seguir sin podar con el techo normal.</li>
+</ol>
+<pre><code class="language-python">async def _process_context(self, context):
+    if self._rate_limited():
+        await self._stop_session(&quot;más de 15 llamadas en 60 s: patrón del 19/09&quot;)
+        return
+    pruned, jev_ok = await _minimize_context(context, ...)
+    if jev_ok is False:
+        self._jev_unavailable = True            # techo estricto el resto de la sesión
+    budget = SESSION_TOKEN_BUDGET_DEGRADED if self._jev_unavailable else SESSION_TOKEN_BUDGET
+    self._session_token_estimate += len(json.dumps(pruned.messages)) // 4
+    if self._session_token_estimate &gt; budget:
+        await self._stop_session(&quot;presupuesto de tokens superado&quot;)
+        return
+    return await super()._process_context(pruned)
+</code></pre>
+<p>Para que el techo no sea un precipicio (todo normal hasta el límite y luego la sesión muere de golpe), a partir del 70 % del presupuesto la poda se vuelve más agresiva: candidatos de solo 80 caracteres y el doble de intentos. El contexto se va aligerando antes de llegar al muro.</p>
+<h2>Protección 4: auditar cada sesión contra datos reales</h2>
+<p>El incidente pasó desapercibido hasta que miré el saldo. La API de administración de Anthropic no avisa de nada, así que, al desconectar cada sesión, una tarea en segundo plano consulta el informe de uso de esa ventana de tiempo y, si los tokens de entrada sin caché superan 100.000, me avisa por el mismo bot de Telegram que usa Saturno. Mira tokens, no importes, por la lección de antes. Y tiene su propio contrato de seguridad: cualquier fallo (falta la clave, error de red, respuesta rara) se registra y se ignora, porque nunca debe afectar al apagado del bot.</p>
+<h2>Lo que me llevo</h2>
+<ol>
+<li><strong>En un agente con herramientas, el contexto es el coste.</strong> Cada salida de herramienta que entra se paga en todas las llamadas siguientes.</li>
+<li><strong>Caché primero</strong>, y asegúrate de que cubre lo que crees que cubre (el system prompt no venía incluido).</li>
+<li><strong>Poda con una pregunta global</strong>, no elemento por elemento, y archiva en vez de borrar.</li>
+<li><strong>Las optimizaciones que cambian el prompt compiten con la caché</strong>: cambios únicos y definitivos.</li>
+<li><strong>Frenos que fallan cerrados</strong>: presupuesto, ritmo y un modo degradado más estricto, no más permisivo.</li>
+<li><strong>Mide en tokens y cruza las cifras de dinero</strong> con una fuente independiente antes de alarmarte.</li>
+<li><strong>Audita cada sesión automáticamente.</strong> El gasto que solo descubres mirando el saldo llega siempre tarde.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

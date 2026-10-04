@@ -1,0 +1,155 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Backtesting without fooling yourself: what I learned trying to make a trading bot earn money | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/backtesting-sin-enganarse/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/backtesting-sin-enganarse/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 22 Sep 2026</p>
+      <h1>Backtesting without fooling yourself: what I learned trying to make a trading bot earn money</h1>
+      <p class="lead">Turning my trading strategies into a bot was easy; the hard part was not fooling myself. The data, risk and cost traps I ran into along the way, and how to break down a real loss before blaming the strategy.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Trading bot</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>I've been trading by hand for years, mostly crypto futures, and in August I started turning my strategies into a bot. I thought the hard part would be programming it, and it wasn't. The hard part was not fooling myself: with the data, with my own intuition and, above all, with backtests, which have an enormous capacity to show you exactly what you want to see. Here I tell the story of the traps I fell into, in order, and how I caught them. This is not investment advice or a strategy to copy; it's what I learned about measuring.</p>
+<h2>1. Formalizing what you do by eye</h2>
+<p>The first strategy was my own and I traded it by hand: stochastic RSI on the 15-minute chart, drop to the 5-minute chart when it hits oversold, wait for both to line up, and enter on a candle close, with the stop at the extreme of that candle. Put like that, it sounds like a rule. But when I turned it into code, a pile of questions came up that I used to answer without thinking. Which exact thresholds, 20/80 or something else? Does the take profit trigger when the 5-minute RSI enters the opposite zone, or when a candle closes inside it? If a candle touches the stop with its wick, do you exit there or at the close?</p>
+<p><strong>Lesson:</strong> a strategy you trade by eye isn't a strategy until you can answer all of those questions. And every answer changes the result.</p>
+<h2>2. The first traps were about data, not strategy</h2>
+<p>Before I looked at any result, two bugs showed up that would have invalidated any conclusion:</p>
+<ul>
+<li><strong>The indicator was calculated wrong.</strong> The stochastic RSI the model generated handled the smoothing windows incorrectly. I checked it against a reference library (pandas_ta) and, once fixed, it matched down to machine precision.</li>
+<li><strong>The history was shorter than what I asked for.</strong> Hyperliquid only gives about 17 days of 5-minute candles, even though it has years of hourly candles. I was asking for two months and the API silently returned less. Now the system warns me when it receives less data than it requested.</li>
+</ul>
+<p>With that fixed, the first real result came out: 99 trades, an 18.2% win rate and a −11.06% return.</p>
+<p><strong>Lesson:</strong> before arguing about whether a strategy works, verify the indicator against a reference and check that you have the data you think you have. A backtest on silently truncated data gives you a confident answer to a question you didn't ask.</p>
+<h2>3. The arithmetic of win rate and profit</h2>
+<p>My intuition was that the strategy was cutting winners too early, so we moved the take profit to the 15-minute RSI. I was right about one thing: the winners started winning a lot more, around 3.45 times the risk on average. But the overall result got worse: −18.42%, with only a 12.5% win rate. With the stop right at the signal candle, most trades got stopped out before reaching a target that far away.</p>
+<p>The math that explains it is very simple. With a win rate <code>p</code>, to avoid losing money each winner has to be worth at least <code>(1 − p) / p</code> times what you lose on each loser. At a 12.5% win rate that's about 7 times the risk, and we were at 3.45.</p>
+<p><strong>Lesson:</strong> win rate and profit per trade can't be improved separately. Before touching a parameter, calculate what ratio you need for the win rate you expect.</p>
+<h2>4. The most profitable way to lose money</h2>
+<p>The most interesting story started with a confession: there was a strategy I had been trading for years that always lost, almost as if I had found the most profitable way to lose money. So I flipped it. The original idea was to trade breakouts of the previous candle's range in the direction of the move. The inverted version did the opposite: buy red candles and sell green candles, pyramiding if the price kept moving against me, with an adjustable target instead of a stop.</p>
+<p>The backtest of the inverted version, over 15 months of one-minute Binance data, looked like a dream. Of 128,508 trades, not one failed to reach its target, although some pyramided up to 21 times before resolving. And returns without costs, depending on the parameter, reached +4,134%.</p>
+<p>But there were two hidden traps:</p>
+<ul>
+<li><strong>Having no stop doesn't mean not losing: it means postponing the loss.</strong> A strategy that always ends up hitting its target because it never cuts and keeps adding to a position while it goes against you doesn't avoid losses, it hides them inside a growing exposure. As soon as we measured that real exposure, it lost too.</li>
+<li><strong>Compounding a microscopic edge gives absurd numbers.</strong> When we gave both directions the same discipline (bounded stop and target on both sides), almost the entire grid came out with a profit factor below 1. The only "positive" point had a profit factor of 1.045, practically noise, and yet it showed a total return of more than a trillion percent. That isn't a signal: it's compound interest applied to a tiny edge repeated hundreds of thousands of times.</li>
+</ul>
+<p>In the end the paradox ("how can both directions lose if they're opposites?") wasn't one: we had never compared like with like. The original had a stop and lost; the inverted one had none and seemed to win. With the same risk on both sides, both came out at practically zero. Breaking out of the previous candle's range, on its own, has no edge in either direction.</p>
+<p><strong>Lesson:</strong> if a backtest gives a spectacular result, first look for the risk you aren't measuring. And don't trust the total compounded return: look at the profit factor and the average result per trade.</p>
+<h2>5. Costs don't get diluted by the timeframe</h2>
+<p>I thought that by moving to the 5-minute chart, with bigger moves, fees would weigh less. They didn't, and the reason is simple once you see it. Cost is measured as a percentage of price and it's the same on 1 minute as on 5. The move grows, but the statistical edge you can extract from it doesn't grow in the same proportion: in both cases it was around 0.03% per trade.</p>
+<p>And a 0.05% cost isn't "small" next to a 0.03% edge: it's larger than the whole edge. Repeated thousands of times, that isn't bad luck, it's guaranteed arithmetic in the wrong direction.</p>
+<p><strong>Lesson:</strong> compare the cost to the edge, not to the size of the move. If the cost per trade is bigger than the average edge, no parameter will fix it.</p>
+<h2>6. With real money: bad luck or broken strategy?</h2>
+<p>The strategy that ended up running with real money, on a small account, was a different one: trading against liquidation cascades, betting that when a burst of liquidations pushes the price, part of the move gets reversed. In its first days it coincided with a strong rally in HYPE and accumulated a small loss. My first impulse was to switch strategies, but first I asked the question that needed asking: is the strategy bad, or are we going through the worst possible scenario for it?</p>
+<p>Breaking down the loss gave me a better answer than either of the two:</p>
+<ul>
+<li><strong>Part of it was the cost of the trend.</strong> In the bot's window, HYPE rose 17.5%, which means an average drag of 0.117% every 30 minutes against any short trade. That's unavoidable for a mean-reversion strategy in the middle of a trend.</li>
+<li><strong>The signal worked.</strong> Measuring all the buy cascades in the window (76), not just the ones traded, the excess return after subtracting the trend was −0.262% at 30 minutes, right in the direction the strategy predicts, and even stronger than usual.</li>
+<li><strong>The problem was one of the bot's rules.</strong> It could only hold one open position at a time. Of those 76 cascades it could only enter 45, because in a strong move cascades arrive clustered together, and the excess of those 45 was practically zero (−0.0015%). All the signal was in the ones the bot couldn't touch. On the other side, with fewer signals competing, it traded 9 of 16 and captured +0.538 of the +0.728 points available.</li>
+</ul>
+<p><strong>Lesson:</strong> before blaming the strategy or the market, measure the signal across all opportunities and compare it with the ones you actually traded. The difference between the two is what your execution rules are telling you.</p>
+<h2>7. The backtest-vs-live gap: an alarm, not a verdict</h2>
+<p>The bot logs the difference between what the backtest says should have happened and what happened live. My first reaction, with such a strange market, was to think the gap was useless in those conditions. In the end the conclusion was more nuanced: the gap by itself doesn't prove the strategy is broken, but it does warn that something has gone outside what was expected. In fact, it was a drop in the gap that led us to the breakdown in the previous section. So it's still logged, but as a trigger to investigate, not as a sentence.</p>
+<h2>8. Execution is strategy too</h2>
+<p>With the signal understood, the next leap came from execution: moving from market orders to limit orders, which on many exchanges pay lower fees, and on some even pay you for providing liquidity (negative maker fee), and adding a funding filter that is recalculated on every signal. Choosing an exchange turned out to be part of the design: order minimums, maker fees and real API access vary a lot from one to another, and one that looked perfect had its futures API blocked for regular accounts.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>Formalize before you backtest:</strong> every implicit decision in your manual trading changes the result.</li>
+<li><strong>Verify indicators and data</strong> against a reference before looking at any result.</li>
+<li><strong>Do the win rate vs. profit arithmetic</strong> before tuning parameters.</li>
+<li><strong>Distrust spectacular results:</strong> look for the risk you aren't measuring and look at the profit factor, not the compounded return.</li>
+<li><strong>Compare costs to the edge</strong>, not to the size of the move.</li>
+<li><strong>Break down losses</strong> into trend, signal and execution rules before changing strategy.</li>
+<li><strong>Use the backtest-vs-live gap as an alarm</strong>, not as a verdict.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

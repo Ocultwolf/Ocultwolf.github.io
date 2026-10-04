@@ -1,0 +1,196 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Inside Neon: building a real-time voice assistant | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/neon-asistente-de-voz-en-tiempo-real/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/neon-asistente-de-voz-en-tiempo-real/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 24 Sep 2026</p>
+      <h1>Inside Neon: building a real-time voice assistant</h1>
+      <p class="lead">How Neon&#x27;s voice loop is built with Pipecat, why I chose Soniox and Fish Audio, and the problems that only show up when you actually talk to it: the voice that changes, the turns that get cut off, and the memory that doesn&#x27;t arrive.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Neon · voice assistant</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>Neon came out of something very simple: I was tired of typing. I had Saturno working on his own on my projects, but to talk to him I had to type, and I wanted to speak to him and have him answer in real time, with barely noticeable latency, like talking to a person. In this chapter I explain how the voice loop is built, which providers I chose and why, and the problems that only show up when you really talk to the system: the voice that changes, the half-finished sentences, the turns that get cut off, and the memory that doesn't show up when you reconnect.</p>
+<h2>The cascade loop</h2>
+<p>Neon is built on Pipecat, a Python framework for voice agents. I started from the official scaffold (<code>pipecat init</code>) with a cascade pipeline: the audio is transcribed, the text goes to the LLM, and the response is synthesized back into speech.</p>
+<pre><code class="language-python">pipeline = Pipeline(
+    [
+        transport.input(),      # audio del navegador por WebRTC
+        stt,                    # Soniox: voz -&gt; texto
+        user_aggregator,        # acumula el turno del usuario en el contexto
+        llm,                    # Claude, con herramientas
+        tts,                    # Fish Audio: texto -&gt; voz
+        transport.output(),     # audio de vuelta al navegador
+        assistant_aggregator,   # guarda lo que de verdad se dijo
+    ]
+)
+</code></pre>
+<p>What I like about the cascade in Pipecat is that the stages don't wait for each other end to end: everything streams, so the TTS starts speaking with the LLM's first sentence while the rest is still being generated. There's a detail that looks minor and isn't: the assistant aggregator goes after <code>transport.output()</code>, so the context stores what actually came out of the speaker and not what the LLM was planning to say. That matters as soon as interruptions come into play.</p>
+<p>The transport is WebRTC straight from the browser (SmallWebRTC), with a custom web client with a cyberpunk look. To use it away from home I serve the page through a Cloudflare tunnel, but the WebRTC audio doesn't travel through that tunnel: it has to get through the NAT on its own. That's why the bot starts with Cloudflare STUN and TURN servers configured as <code>ice-servers</code>.</p>
+<h2>Choosing providers: price, latency, and how I talk</h2>
+<p>The scaffold came with Deepgram for STT and ElevenLabs for TTS. I swapped both on the same day:</p>
+<ul>
+<li><strong>TTS: Fish Audio instead of ElevenLabs.</strong> From what I found comparing them, Fish Audio came out between 2 and 11 times cheaper per character (on the order of $15 per million characters versus $30-100 depending on the ElevenLabs plan), with comparable quality in recent blind tests. Pipecat has a native service for Fish, so it was a straightforward swap.</li>
+<li><strong>STT: Soniox instead of Deepgram.</strong> Here the reason was more personal. I mix Spanish and English in the same sentence all the time ("haz un backtest con el stop loss en..."), and Soniox has native code-switching for that, and it also came out ahead on price, accuracy, and latency in the comparisons I looked at. I pass it language hints (Spanish and English) to bias recognition without locking it to those two.</li>
+</ul>
+<p>The LLM is Claude through Pipecat's Anthropic service, wrapped in a custom subclass with the cost protections I describe in the next chapter.</p>
+<h2>The voice that changed every time</h2>
+<p>The first thing I noticed when I actually used it was that Neon's voice changed: it didn't always sound the same. The logs explained it right away. Fish Audio opened a new websocket on every Neon turn (connect, speak, disconnect, every 10 or 20 seconds) and, since we weren't asking for a specific voice (empty <code>reference_id</code>), each new connection could end up with a different default voice. The fix was to pin the voice ID in the configuration:</p>
+<pre><code class="language-python">tts = FishAudioTTSService(
+    api_key=os.getenv(&quot;[censurado]&quot;),
+    reference_id=os.getenv(&quot;[censurado]&quot;) or None,
+)
+</code></pre>
+<p><strong>Lesson:</strong> in a service that reconnects on every turn, any parameter you leave at its default can change between turns. Whatever you want to stay stable, set it explicitly.</p>
+<h2>The sentences he didn't finish</h2>
+<p>The second symptom was more confusing: sometimes a complete response appeared on screen as text, but the voice didn't say all of it. There was no TTS error in the logs. The most likely explanation was ordinary interruption: if I start talking while Neon is still speaking, the pipeline cuts the audio on the spot (that's what lets me interrupt him like a person), but the text the LLM had already generated can keep showing up in the transcript. That fit something I had noticed myself: what got skipped was usually the ending, the least important part.</p>
+<p>Still, I was left with a doubt: I didn't feel like I was interrupting him, and the bot only seemed to cut off when I spoke, coughed, or made some direct noise. That led me to the real problem, which was how Neon decides when I've finished talking.</p>
+<h2>Turns: the VAD that cut me off mid-sentence</h2>
+<p>A voice assistant has to decide when you've finished talking. Pipecat uses a VAD (Silero) and, by default, considers your turn over after 0.2 seconds of silence. For a quick exchange that's fine, but I talk while thinking out loud: I pause, I say "uh", I breathe in the middle of an idea. Going through the logs of a real session from September 23, I found 11 LLM calls in 35 seconds coming from a single utterance of mine, chopped into several "turns" at every pause. Each chunk was an LLM call, with its own cost and with its response stepping on the previous one.</p>
+<p>I raised the silence threshold to 0.8 seconds. The next day the side effect showed up: when a pause fell right at the edge of those 0.8 seconds, the VAD reported "stopped" and "started" milliseconds apart. That immediate "started" triggered an interruption that cancelled the response the "stopped" had just launched, and the session went silent until the client gave up and disconnected.</p>
+<p>The mitigation wasn't to touch the silence threshold again, but the start one: require the voice to be sustained for 0.35 seconds (instead of 0.2) before considering that a new turn has begun. That way, a breath or a stray noise right after the edge is no longer enough to trigger the interruption.</p>
+<pre><code class="language-python">VOICE_STOP_SECS = float(os.getenv(&quot;NEON_VOICE_STOP_SECS&quot;, &quot;0.8&quot;))
+VOICE_START_SECS = float(os.getenv(&quot;NEON_VOICE_START_SECS&quot;, &quot;0.35&quot;))
+
+user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+    context,
+    user_params=LLMUserAggregatorParams(
+        vad_analyzer=SileroVADAnalyzer(
+            params=VADParams(stop_secs=VOICE_STOP_SECS, start_secs=VOICE_START_SECS)
+        )
+    ),
+)
+</code></pre>
+<p>This reduces the problem, it doesn't eliminate it, and it was a conscious decision: I prefer fewer, longer turns, even if Neon takes a bit longer to respond, over being cut off mid-sentence.</p>
+<p><strong>Lesson:</strong> the default turn-taking values are designed for a ping-pong conversation. If that's not how you talk, measure with real logs before changing anything, because every threshold you change moves the problem somewhere else.</p>
+<h2>Memory across reconnections</h2>
+<p>I asked Neon for something that was basic to me: when I turn it off and on again, it shouldn't start a new conversation by introducing itself all over again, but continue the same one, smoothly. The implementation is simple: on disconnect, the context history is saved to disk, separated by user, and on reconnect it's loaded. If there's already a history, Neon doesn't greet me: it stays quiet and waits for me to speak.</p>
+<pre><code class="language-python">@worker.rtvi.event_handler(&quot;on_client_ready&quot;)
+async def on_client_ready(rtvi):
+    if not saved_messages:
+        # primera conversación de la historia: se presenta una vez
+        context.add_message({&quot;role&quot;: &quot;developer&quot;, &quot;content&quot;: &quot;Start by concisely introducing yourself.&quot;})
+        await worker.queue_frames([LLMRunFrame()])
+    # si no, es una reconexión: espera a que hable yo
+</code></pre>
+<p>Even so, one day I reconnected, said "hola" and it didn't answer; with a second "hola hola" it did. I also had the feeling that context was getting lost. The real bug was in the client: the username was being sent as a sibling of <code>transport</code> in the request, but Pipecat's runner only forwards to the bot what goes inside <code>requestData.body</code>; the rest it consumes itself to choose the transport. The result: the username hadn't reached the server a single time since I built the multi-user system, and every session landed in a shared generic history instead of mine.</p>
+<pre><code class="language-js">export function setUsername(username) {
+  smallWebRTCConfig.requestData.body.username = username; // dentro de body, no al lado
+}
+</code></pre>
+<p>Once the client was fixed, I migrated the 247 messages from the shared history into my file so I wouldn't lose continuity.</p>
+<p><strong>Lesson:</strong> when a piece of data crosses a framework boundary (client, runner, bot), check that it actually arrives on the other side, not just that you send it. A failure like this throws no errors: everything just works "more or less" with the wrong data.</p>
+<h2>Prompt caching in a conversation with pauses</h2>
+<p>A voice conversation has real gaps: me thinking, or a shell command that takes up to a minute. The Anthropic prompt caching that Pipecat enables marks user messages with the default ephemeral cache of 5 minutes, but the system prompt, which is long, is left out: the adapter only marks user messages. So I cache the system prompt separately, with a one-hour cache, so that a long pause doesn't charge me for the whole uncached prompt on the next turn.</p>
+<pre><code class="language-python">settings=AnthropicLLMService.Settings(
+    model=os.getenv(&quot;ANTHROPIC_MODEL&quot;),
+    system_instruction=SYSTEM_INSTRUCTION,
+    enable_prompt_caching=True,
+    extra={&quot;system&quot;: [{&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: SYSTEM_INSTRUCTION,
+                       &quot;cache_control&quot;: {&quot;type&quot;: &quot;ephemeral&quot;, &quot;ttl&quot;: &quot;1h&quot;}}]},
+),
+</code></pre>
+<h2>Proactive notifications without interrupting</h2>
+<p>Neon can send work to the background. When that work finishes, I wanted him to tell me if I'm on a call with him, without my having to ask. While a session is connected, a loop checks every 20 seconds (it's a local file, zero cost) whether anything has finished.</p>
+<p>The interesting part isn't the polling, but how he tells me. If he just blurts it out, he can talk over what I'm saying or drop a long technical summary in the middle of something else. So the notification enters the context as a <code>developer</code> message with instructions to first do a short check-in ("I have news about a task, can you hear me?"), wait for me to confirm, and only then tell it in a couple of spoken sentences. If I'm busy with something else, he doesn't insist: he holds on to it and mentions it when the conversation calms down.</p>
+<p><strong>Lesson:</strong> in voice, when you say something matters as much as what you say. A proactive notification needs the same care as a person interrupting you in a meeting.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>The streaming cascade works</strong> for a natural conversation, and the order of the pipeline matters: the context has to store what was actually said.</li>
+<li><strong>Choose providers by how you talk</strong>, not just by price: Spanish-English code-switching is what decided the STT.</li>
+<li><strong>Explicitly pin whatever has to stay stable</strong> (the voice), especially in services that reconnect on every turn.</li>
+<li><strong>Turn-taking is tuned with real logs</strong>, and every threshold shifts the problem: the silence and start thresholds have to be tuned together.</li>
+<li><strong>Verify that data crosses framework boundaries</strong>; silent failures are the most expensive.</li>
+<li><strong>Proactive notifications have to be polite</strong>: check-in first, content after.</li>
+</ol>
+<p>There's one part I deliberately left out because it deserves a chapter of its own: on September 19, a single Neon session triggered a consumption of about 12 million input tokens. Everything I built afterwards so that it doesn't happen again (per-session budget, rate limiter, context pruning, and spend audit) goes in the next chapter.</p></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

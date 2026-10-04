@@ -1,0 +1,155 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Backtesting sin engañarse: lo que aprendí intentando que un bot de trading gane dinero | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/backtesting-sin-enganarse/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/backtesting-sin-enganarse/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 22 Sep 2026</p>
+      <h1>Backtesting sin engañarse: lo que aprendí intentando que un bot de trading gane dinero</h1>
+      <p class="lead">Convertir mis estrategias de trading en un bot fue fácil; lo difícil fue no engañarme. Las trampas de datos, de riesgo y de costes que encontré por el camino, y cómo descomponer una pérdida real antes de culpar a la estrategia.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Bot de trading</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>Llevo años operando a mano, sobre todo en futuros de cripto, y en agosto me puse a convertir mis estrategias en un bot. Pensaba que lo difícil sería programarlo y no lo fue. Lo difícil fue no engañarme: con los datos, con mi propia intuición y, sobre todo, con los backtests, que tienen una capacidad enorme para enseñarte justo lo que quieres ver. Aquí cuento las trampas en las que caí, por orden, y cómo las detecté. No es un consejo de inversión ni una estrategia para copiar; es lo que aprendí sobre medir.</p>
+<h2>1. Formalizar lo que haces a ojo</h2>
+<p>La primera estrategia era mía y la operaba a mano: RSI estocástico en el gráfico de 15 minutos, bajar al de 5 cuando toca sobreventa, esperar a que ambos estén alineados y entrar al cierre de una vela, con el stop en el extremo de esa vela. Dicho así parece una regla. Pero al pasarla a código me salieron un montón de preguntas que yo resolvía sin pensar. ¿Qué umbrales exactos, 20/80 u otros? ¿El take profit salta cuando el RSI de 5 minutos entra en la zona opuesta o cuando cierra una vela dentro? Si una vela toca el stop con la mecha, ¿se sale ahí o al cierre?</p>
+<p><strong>Lección:</strong> una estrategia que operas a ojo no es una estrategia hasta que puedes contestar todas esas preguntas. Y cada respuesta cambia el resultado.</p>
+<h2>2. Las primeras trampas eran de datos, no de estrategia</h2>
+<p>Antes de mirar ningún resultado aparecieron dos bugs que habrían invalidado cualquier conclusión:</p>
+<ul>
+<li><strong>El indicador estaba mal calculado.</strong> El RSI estocástico que generó el modelo usaba mal las ventanas de suavizado. Lo comprobé contra una librería de referencia (pandas_ta) y, una vez corregido, coincidía hasta la precisión de máquina.</li>
+<li><strong>El histórico era más corto de lo que pedía.</strong> Hyperliquid solo da unos 17 días de velas de 5 minutos, aunque tenga años de velas de una hora. Yo pedía dos meses y la API devolvía menos sin avisar. Ahora el sistema avisa cuando recibe menos datos de los que ha pedido.</li>
+</ul>
+<p>Con eso arreglado, salió el primer resultado real: 99 operaciones, un 18,2 % de acierto y un −11,06 % de retorno.</p>
+<p><strong>Lección:</strong> antes de discutir si una estrategia funciona, verifica el indicador contra una referencia y comprueba que tienes los datos que crees tener. Un backtest con datos recortados en silencio te da una respuesta segura a una pregunta que no hiciste.</p>
+<h2>3. La aritmética del acierto y el beneficio</h2>
+<p>Mi intuición era que la estrategia cortaba las ganancias demasiado pronto, así que movimos el take profit al RSI de 15 minutos. En una cosa tenía razón: las ganadoras pasaron a ganar mucho más, unas 3,45 veces el riesgo de media. Pero el resultado total empeoró: −18,42 %, con solo un 12,5 % de acierto. Con el stop pegado a la vela de señal, la mayoría de las operaciones se paraban antes de llegar a un objetivo tan lejano.</p>
+<p>La cuenta que lo explica es muy simple. Con un acierto <code>p</code>, para no perder necesitas que cada ganadora valga al menos <code>(1 − p) / p</code> veces lo que pierdes en cada perdedora. Con un 12,5 % de acierto eso son unas 7 veces el riesgo, y estábamos en 3,45.</p>
+<p><strong>Lección:</strong> el acierto y el beneficio por operación no se pueden mejorar por separado. Antes de tocar un parámetro, calcula qué ratio necesitas para el acierto que esperas.</p>
+<h2>4. La forma más rentable de perder dinero</h2>
+<p>La historia más interesante empezó con una confesión: había una estrategia que llevaba años operando y que siempre perdía, casi como si hubiera encontrado la forma más rentable de perder dinero. Así que le di la vuelta. La idea de partida era operar a favor del movimiento las rupturas del rango de la vela anterior. La versión invertida hacía lo contrario: comprar velas rojas y vender velas verdes, piramidando si el precio seguía en contra, con un objetivo que se ajustaba en vez de un stop.</p>
+<p>El backtest de la versión invertida, sobre 15 meses de datos de un minuto de Binance, parecía un sueño. De 128.508 operaciones, ninguna se quedó sin alcanzar el objetivo, aunque alguna llegó a piramidar 21 veces antes de resolverse. Y los retornos sin costes, según el parámetro, llegaban al +4.134 %.</p>
+<p>Pero había dos trampas escondidas:</p>
+<ul>
+<li><strong>No tener stop no es no perder: es aplazar la pérdida.</strong> Una estrategia que siempre acaba tocando el objetivo porque nunca corta y añade posición mientras va en contra no evita las pérdidas, las esconde dentro de una exposición creciente. En cuanto medimos esa exposición real, también perdía.</li>
+<li><strong>Componer una ventaja microscópica da números absurdos.</strong> Cuando les dimos a las dos direcciones la misma disciplina (stop y objetivo acotados en ambos lados), casi todo el grid salió con profit factor por debajo de 1. El único punto "positivo" tenía un profit factor de 1,045, prácticamente ruido, y aun así mostraba un retorno total de más de un billón por ciento. Eso no es una señal: es el interés compuesto aplicado a una ventaja minúscula repetida cientos de miles de veces.</li>
+</ul>
+<p>Al final la paradoja ("¿cómo pueden perder las dos direcciones si son opuestas?") no era tal: nunca habíamos comparado lo mismo. La original tenía stop y perdía; la invertida no lo tenía y parecía ganar. Con el mismo riesgo en los dos lados, las dos daban prácticamente cero. Romper el rango de la vela anterior, sin más, no tiene ventaja en ninguna dirección.</p>
+<p><strong>Lección:</strong> si un backtest da un resultado espectacular, busca primero qué riesgo no estás midiendo. Y no te fíes del retorno total compuesto: mira el profit factor y el resultado medio por operación.</p>
+<h2>5. Los costes no se diluyen con el timeframe</h2>
+<p>Pensé que, pasando al gráfico de 5 minutos y con movimientos más grandes, las comisiones pesarían menos. No fue así, y la razón es sencilla una vez la ves. El coste se mide como porcentaje del precio y es el mismo en 1 que en 5 minutos. El movimiento crece, pero la ventaja estadística que puedes sacarle no crece en la misma proporción: en los dos casos rondaba un 0,03 % por operación.</p>
+<p>Y un coste del 0,05 % no es "pequeño" al lado de una ventaja del 0,03 %: es mayor que la ventaja entera. Repetido miles de veces, no es mala suerte, es aritmética garantizada en la dirección equivocada.</p>
+<p><strong>Lección:</strong> compara el coste con el edge, no con el tamaño del movimiento. Si el coste por operación es mayor que la ventaja media, no hay parámetro que lo arregle.</p>
+<h2>6. Con dinero real: ¿mala suerte o estrategia rota?</h2>
+<p>La estrategia que acabó corriendo con dinero real, con una cuenta pequeña, fue otra: ir en contra de las cascadas de liquidaciones, apostando a que, cuando una ráfaga de liquidaciones empuja el precio, parte del movimiento se devuelve. En sus primeros días coincidió con una subida fuerte de HYPE y acumuló una pérdida pequeña. Mi primer impulso fue cambiar de estrategia, pero antes me hice la pregunta que tocaba: ¿la estrategia es mala, o estamos atravesando el peor escenario posible para ella?</p>
+<p>Descomponer la pérdida me dio una respuesta mejor que cualquiera de las dos:</p>
+<ul>
+<li><strong>Una parte era el coste de la tendencia.</strong> En la ventana del bot, HYPE subió un 17,5 %, lo que supone un arrastre medio de un 0,117 % cada 30 minutos contra cualquier operación corta. Es inevitable para una estrategia de reversión en plena tendencia.</li>
+<li><strong>La señal funcionaba.</strong> Midiendo todas las cascadas de compra de la ventana (76), y no solo las operadas, el retorno en exceso descontando la tendencia fue del −0,262 % a 30 minutos, justo en la dirección que predice la estrategia, e incluso más fuerte de lo normal.</li>
+<li><strong>El problema era una regla del bot.</strong> Solo podía tener una posición abierta a la vez. De esas 76 cascadas solo pudo entrar en 45, porque en un movimiento fuerte las cascadas llegan agrupadas, y el exceso de esas 45 era prácticamente cero (−0,0015 %). Toda la señal estaba en las que el bot no podía tocar. En el lado contrario, con menos señales compitiendo, operó 9 de 16 y capturó +0,538 de los +0,728 puntos disponibles.</li>
+</ul>
+<p><strong>Lección:</strong> antes de culpar a la estrategia o al mercado, mide la señal sobre todas las oportunidades y compárala con las que de verdad operaste. La diferencia entre las dos es lo que te dicen tus reglas de ejecución.</p>
+<h2>7. El gap entre backtest y real: una alarma, no un veredicto</h2>
+<p>El bot registra la diferencia entre lo que el backtest dice que debería haber pasado y lo que pasó en real. Mi primera reacción, con un mercado tan raro, fue pensar que ese gap no servía para nada en esas condiciones. Al final la conclusión fue más matizada: el gap por sí solo no demuestra que la estrategia esté rota, pero sí avisa de que algo se ha salido de lo esperado. De hecho, fue una caída del gap lo que nos llevó a la descomposición del punto anterior. Así que se sigue registrando, pero como disparador para investigar, no como sentencia.</p>
+<h2>8. La ejecución también es estrategia</h2>
+<p>Con la señal entendida, el siguiente salto vino por la ejecución: pasar de órdenes a mercado a órdenes límite, que en muchos exchanges pagan menos comisión, y en alguno hasta te pagan a ti por aportar liquidez (comisión maker negativa), y añadir un filtro de funding que se recalcula en cada señal. Elegir exchange resultó ser parte del diseño: los mínimos de orden, las comisiones maker y el acceso real a la API cambian mucho de uno a otro, y alguno que parecía perfecto tenía la API de futuros bloqueada para cuentas normales.</p>
+<h2>Lo que me llevo</h2>
+<ol>
+<li><strong>Formaliza antes de backtestear:</strong> cada decisión implícita de tu operativa manual cambia el resultado.</li>
+<li><strong>Verifica indicadores y datos</strong> contra una referencia antes de mirar ningún resultado.</li>
+<li><strong>Haz la aritmética de acierto contra beneficio</strong> antes de ajustar parámetros.</li>
+<li><strong>Desconfía de los resultados espectaculares:</strong> busca el riesgo que no estás midiendo y mira el profit factor, no el retorno compuesto.</li>
+<li><strong>Compara costes con el edge</strong>, no con el tamaño del movimiento.</li>
+<li><strong>Descompón las pérdidas</strong> en tendencia, señal y reglas de ejecución antes de cambiar de estrategia.</li>
+<li><strong>Usa el gap entre backtest y real como alarma</strong>, no como veredicto.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

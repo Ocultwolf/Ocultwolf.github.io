@@ -1,0 +1,148 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Mi laboratorio casero: treinta servicios, tres tipos de aislamiento y lo que nadie está mirando | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/mi-laboratorio-casero/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/mi-laboratorio-casero/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 03 Oct 2026</p>
+      <h1>Mi laboratorio casero: treinta servicios, tres tipos de aislamiento y lo que nadie está mirando</h1>
+      <p class="lead">Treinta servicios en una sola máquina, tres niveles de aislamiento con su precio, túneles efímeros y lo que encontré al revisarlo: paradas que parecían averías, averías que nadie veía y un servicio activo que llevaba semanas sin funcionar.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Infraestructura</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>Todo lo que cuenta este blog corre en una sola máquina Linux en casa: el asistente de voz, los agentes autónomos, los bots de trading, los agentes que capturan datos, la base de datos de JARVIS-PD y hasta esta web. No es un clúster ni una nube, es un ordenador con una GPU y muchas cosas encima. En este capítulo cuento cómo lo tengo organizado, qué decisiones me han funcionado y, sobre todo, lo que encontré al revisarlo para escribir esto: averías que llevaban semanas sin que nadie las viera.</p>
+<h2>Todo lo que tiene que vivir, como servicio</h2>
+<p>La regla es simple: nada importante corre en una terminal abierta. Todo lo que tiene que estar vivo es un servicio de systemd de usuario, con su descripción, su directorio de trabajo, sus logs en journald y una política de reinicio. Ahora mismo son unos treinta, que caen en unas pocas familias:</p>
+<ul>
+<li><strong>Voz:</strong> el servidor de Neon, su cliente web y los túneles que los exponen.</li>
+<li><strong>Agentes:</strong> el daemon de Saturno, su puente de Telegram, el revisor y el generador de objetivos de Neon, el watchdog y el worker y la API de JARVIS-PD.</li>
+<li><strong>Datos para trading:</strong> agentes que capturan liquidaciones, flujo de órdenes, datos on-chain, registros de la SEC o nuevos tokens.</li>
+<li><strong>Trading:</strong> el bot con dinero real, un paper trader y una API de inferencia local en la GPU.</li>
+<li><strong>Infraestructura:</strong> el proxy que da acceso a los modelos de NVIDIA para Codex, un editor de código en el navegador y sus túneles.</li>
+</ul>
+<p>Llegué a esta regla a base de golpes. El capítulo de averías de Saturno empieza con un proxy que no estaba supervisado por nada: cuando se caía, todo lo que dependía de él fallaba de una forma que parecía un bug. Hoy ese proxy es un servicio más.</p>
+<p><strong>Lección:</strong> si algo tiene que estar vivo, que lo mantenga vivo el sistema y no tu memoria. Un servicio con logs y política de reinicio es la diferencia entre "se cayó y volvió" y "llevaba dos días caído".</p>
+<h2>Tres niveles de aislamiento, cada uno con su precio</h2>
+<p>No todo corre igual de aislado, y cada nivel me ha dado un problema distinto:</p>
+<ul>
+<li><strong>Directamente en el host:</strong> la mayoría de servicios. Es lo más simple y lo más frágil, porque todo comparte usuario, entornos y archivos.</li>
+<li><strong>Docker, con root dentro:</strong> OpenClaw y los agentes de Codex. Aíslan dependencias, pero si un proceso es root dentro del contenedor y escribe en una carpeta montada, deja archivos de root en el host. Eso fue lo que rompió el entorno de Python en el capítulo de averías: el contenedor y el host interpretaban la misma ruta de forma distinta.</li>
+<li><strong>Un contenedor Incus no privilegiado:</strong> la copia de Neon con la arquitectura nueva. Es el aislamiento más serio, porque los UID de dentro se remapean a UID sin privilegios fuera. Precisamente por eso un proceso del contenedor no puede abrir el socket de tmux de mi usuario en el host, y la solución fue el puente HTTP autenticado del capítulo sobre separar conversación y trabajo.</li>
+</ul>
+<p><strong>Lección:</strong> el aislamiento no es gratis. Cuanto más real es la frontera, más cosas que antes "simplemente funcionaban" necesitan un canal explícito para cruzarla. Elige el nivel según lo que te juegas y diseña el canal desde el principio.</p>
+<h2>Túneles: rápidos, gratis y efímeros</h2>
+<p>Para usar Neon desde el móvil o enseñar esta web sin abrir puertos en el router uso túneles rápidos de Cloudflare: un comando, sin cuenta ni dominio, y te da una URL pública. Son perfectos para prototipar, pero tienen tres pegas que he sufrido todas:</p>
+<ul>
+<li><strong>La URL cambia en cada reinicio.</strong> "Pásame la URL de la web" es de las cosas que más veces he pedido. Un día, al revisarlo, encontré dos túneles distintos apuntando a la misma web, y uno llevaba abierto más de un mes.</li>
+<li><strong>Una URL recién creada no siempre resuelve al momento.</strong> Al probar un túnel nuevo, mi propio resolvedor DNS decía que el dominio no existía, porque había guardado esa respuesta negativa en caché. Consultado contra un resolvedor público, funcionaba. Ojo con dar por roto algo que solo es tu caché.</li>
+<li><strong>No todo cabe por el túnel.</strong> La página de Neon sí, pero el audio de WebRTC no viaja por un túnel HTTP: necesita atravesar el NAT por su cuenta, con servidores STUN y TURN.</li>
+</ul>
+<p>Para algo que tiene que ser estable, la respuesta es un túnel con nombre y un dominio propio. Para todo lo demás, los rápidos están bien, siempre que no dependas de su URL.</p>
+<h2>Lo que nadie está mirando</h2>
+<p>Esta es la parte que no esperaba escribir. Al listar los servicios para este capítulo aparecieron tres en estado de fallo.</p>
+<p><strong>Dos no eran fallos.</strong> Eran el daemon de Saturno y el watchdog, que había parado yo a propósito con un script que espera a que termine la tarea en curso. Pero el proceso de Python termina con el código 143 al recibir SIGTERM, y systemd lo registra como "failed". Una parada intencionada y una avería se ven exactamente igual en el listado. Es la misma lección que en el capítulo de averías ("no todos los fallos son iguales"), pero en el gestor de servicios: hay que tratar la señal de parada como una salida limpia, o declarar ese código como éxito en la unidad, para que "failed" vuelva a significar algo.</p>
+<p><strong>El tercero sí era una avería, y llevaba 37 noches fallando.</strong> Es una tarea programada que audita cada noche el diario del paper trader. Su entorno de Python ya no existe, así que cada noche systemd intentaba arrancarla y no encontraba el ejecutable. Nadie lo vio, porque nada avisa cuando falla una tarea programada.</p>
+<p>Y tirando de ese hilo apareció lo más importante. Otros dos servicios usaban ese mismo entorno borrado y seguían en estado "activo": habían arrancado antes de que se borrara, y un proceso en marcha conserva lo que ya tenía cargado. Pero "activo" no significaba "funcionando". Uno de ellos, el paper trader, llevaba desde finales de agosto fallando cada cinco minutos: al hacer su primera petición HTTPS buscaba los certificados TLS dentro del entorno que ya no existía. Más de diez mil errores en el log y, para systemd, un servicio perfectamente sano, porque el bucle capturaba la excepción, la imprimía y seguía.</p>
+<p>Recreé el entorno (con la misma build de PyTorch para la GPU), reinicié los servicios y comprobé que arrancaban de verdad sin tocar nada del entorno borrado. Aun así, el paper trader no se ha recuperado solo: ahora quiere procesar en orden las semanas de velas que se perdió, y para las primeras no tiene historia suficiente. Reconstruir ese diario es una decisión, no un arreglo automático.</p>
+<p><strong>Lección:</strong> un listado lleno de "failed" que nadie mira es igual que no tener listado. Las paradas intencionadas tienen que salir limpias, los fallos reales tienen que avisar, y "activo" no significa "funcionando": un bucle que captura todas las excepciones y sigue adelante esconde un fallo permanente detrás de un estado sano. Si un error se repite cada ciclo, el servicio tiene que caerse o avisar, no seguir imprimiéndolo.</p>
+<h2>Lo que me llevo</h2>
+<ol>
+<li><strong>Todo lo que tiene que vivir, como servicio</strong>, con logs y política de reinicio.</li>
+<li><strong>Elige el aislamiento según lo que te juegas</strong>, y diseña desde el principio el canal para cruzar la frontera.</li>
+<li><strong>Los túneles rápidos, para prototipos</strong>; lo estable, con nombre y dominio.</li>
+<li><strong>Antes de dar algo por roto, descarta tu caché.</strong></li>
+<li><strong>Que "failed" signifique fallo:</strong> las paradas intencionadas tienen que terminar limpias.</li>
+<li><strong>Las tareas programadas también tienen que avisar cuando fallan.</strong></li>
+<li><strong>"Activo" no es "funcionando":</strong> un error que se repite cada ciclo tiene que tumbar el servicio o avisar.</li>
+<li><strong>Un proceso en marcha no demuestra que pueda arrancar otra vez.</strong> Pruébalo reiniciándolo antes de que lo haga la máquina por ti.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

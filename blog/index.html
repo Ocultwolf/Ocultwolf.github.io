@@ -1,0 +1,184 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Blog | Pablo D V</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Technical blog · Pablo Dominguez Viera</p>
+      <h1>Blog</h1>
+      <p class="lead">Technical chapters from real projects: autonomous agents, a real-time voice assistant and trading bots. What I built, what broke and what I learned, with the code and the numbers.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container grid-2">
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">03 Oct 2026</span><span>Infrastructure</span></div>
+        <h3><a href="/blog/mi-laboratorio-casero/">My home lab: thirty services, three kinds of isolation, and what nobody is watching</a></h3>
+        <p>Thirty services on a single machine, three levels of isolation and what each one costs, ephemeral tunnels, and what I found when I audited it: stops that looked like failures, failures that nobody saw, and an active service that had been broken for weeks.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">03 Oct 2026</span><span>Trading bot · data</span></div>
+        <h3><a href="/blog/capturar-datos-de-mercado-gratis/">Capturing free market data: nine agents and the connections that never say anything</a></h3>
+        <p>Nine agents that only capture free market data: what actually exists without paying, what you have to build, and why a connection that throws no errors is not a connection that works.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">01 Oct 2026</span><span>Craft · this blog</span></div>
+        <h3><a href="/blog/blog-escrito-a-partir-de-sesiones-con-agentes/">A blog written from my agent sessions (and why the first version was useless)</a></h3>
+        <p>How I turn hundreds of agent sessions into articles: why the automatic journal didn&#x27;t work, how I verify every fact, how I made the texts sound like me, and how I keep a secret from slipping out.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">30 Sep 2026</span><span>Neon · memory</span></div>
+        <h3><a href="/blog/memoria-de-un-asistente-de-voz/">A voice assistant&#x27;s memory: what to remember, where, and how to admit you&#x27;ve forgotten</a></h3>
+        <p>An assistant&#x27;s memory isn&#x27;t one thing: it&#x27;s five layers with different lifetimes, costs and failure modes. Every &quot;it lost its memory&quot; bug I diagnosed came from a different layer.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">30 Sep 2026</span><span>Neon · security</span></div>
+        <h3><a href="/blog/darle-root-a-un-asistente-de-voz/">Giving a voice assistant root (and why I ended up taking it away)</a></h3>
+        <p>The layers I added to make a voice assistant with root access reasonable, what each one protects and what it doesn&#x27;t, and why the safest decision was to take the shell away from the model that does the talking.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">30 Sep 2026</span><span>Neon · architecture</span></div>
+        <h3><a href="/blog/separar-conversacion-y-ejecucion/">Let Neon talk and let someone else do the work</a></h3>
+        <p>Neon stopped executing commands and started delegating: a background agent for new tasks and an HTTP bridge to my Claude Code sessions in tmux. The architecture, and what was learned while wiring it up.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">29 Sep 2026</span><span>Agents · models</span></div>
+        <h3><a href="/blog/orquestar-varios-modelos/">Orchestrating multiple models: each in its place</a></h3>
+        <p>Half a dozen models, each in its own role: the expensive one where judgment matters and the cheap one where its mistakes get caught. The patterns that work, and what happens when the one that fails is the reviewer.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">26 Sep 2026</span><span>JARVIS-PD · architecture</span></div>
+        <h3><a href="/blog/jarvis-pd-por-dentro/">Inside JARVIS-PD: an agent system that has to prove what it does</a></h3>
+        <p>The core that has to prove what it does: gates backed by reproducible evidence, a Gate 0 that failed, leases with fencing tokens, versioned contracts, six audits for a single worker, and the real cost of so much rigor.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">25 Sep 2026</span><span>JARVIS-PD · tokens</span></div>
+        <h3><a href="/blog/presupuesto-antes-de-la-llamada/">Putting a budget on a call before it goes out</a></h3>
+        <p>A policy enforcement point in front of every model call: measure against actual usage, fail closed at every step, and why a control that validates one thing and sends another controls nothing.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">24 Sep 2026</span><span>Neon · cost</span></div>
+        <h3><a href="/blog/controlar-el-coste-de-un-agente-con-herramientas/">12 million tokens in one afternoon: how to control the cost of a tool-using agent</a></h3>
+        <p>A Neon session burned through 12 million uncached tokens, and a unit error turned it into a $2,400 scare. What really happened, and the four safeguards that work for any tool-using agent.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">24 Sep 2026</span><span>Neon · voice assistant</span></div>
+        <h3><a href="/blog/neon-asistente-de-voz-en-tiempo-real/">Inside Neon: building a real-time voice assistant</a></h3>
+        <p>How Neon&#x27;s voice loop is built with Pipecat, why I chose Soniox and Fish Audio, and the problems that only show up when you actually talk to it: the voice that changes, the turns that get cut off, and the memory that doesn&#x27;t arrive.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">22 Sep 2026</span><span>Trading bot</span></div>
+        <h3><a href="/blog/backtesting-sin-enganarse/">Backtesting without fooling yourself: what I learned trying to make a trading bot earn money</a></h3>
+        <p>Turning my trading strategies into a bot was easy; the hard part was not fooling myself. The data, risk and cost traps I ran into along the way, and how to break down a real loss before blaming the strategy.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">20 Sep 2026</span><span>JARVIS-PD · robustness</span></div>
+        <h3><a href="/blog/servicio-http-python-concurrencia-validacion/">A Python HTTP service under pressure: concurrency, validation, and the deadlock that wasn&#x27;t</a></h3>
+        <p>A small HTTP runner that enforces token budgets taught me more about robustness than almost anything else: concurrency, layered validation, mocks that miss their target, a deadlock that didn&#x27;t exist, and approved work that got lost.</p>
+      </article>
+      
+      <article class="card">
+        <div class="card-top"><span class="pill">19 Sep 2026</span><span>Autonomous agents</span></div>
+        <h3><a href="/blog/como-falla-un-agente-autonomo/">How an autonomous agent fails: six real Saturno breakdowns</a></h3>
+        <p>Getting an agent to work on its own is easy; the hard part is getting it to fail well. Six real Saturno breakdowns, their causes, their fixes, and the pattern behind each one.</p>
+      </article>
+      
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Darle root a un asistente de voz (y por qué acabé quitándoselo) | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/es/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/es/#home">Inicio</a></li>
+      <li><a href="/es/#about">Sobre mí</a></li>
+      <li><a href="/es/#projects">Proyectos</a></li>
+      <li><a href="/es/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Idioma">
+      <a href="/blog/darle-root-a-un-asistente-de-voz/" hreflang="en" lang="en">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/darle-root-a-un-asistente-de-voz/" hreflang="es" lang="es" class="active" aria-current="true">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 30 Sep 2026</p>
+      <h1>Darle root a un asistente de voz (y por qué acabé quitándoselo)</h1>
+      <p class="lead">Las capas que puse para que un asistente de voz con root fuera razonable, qué protege cada una y qué no, y por qué la decisión más segura fue quitarle la shell al modelo que conversa.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Neon · seguridad</span><span><a href="/es/blog/">Volver al blog</a></span></div>
+        <div class="post-body"><p>Quería un asistente al que pudiera decirle "mira por qué se ha caído tal servicio" o "reinicia esto" y que lo hiciera, en mi máquina, con permisos de verdad. Eso significa darle a un modelo de lenguaje, que escucha por un micrófono y está expuesto a internet a través de un túnel, la capacidad de ejecutar comandos como root. En este capítulo cuento las capas que fui poniendo para que eso fuera razonable, qué protege cada una y qué no, y por qué al final lo más seguro fue quitarle las manos al que conversa.</p>
+<h2>Capa 1: nadie entra sin cuenta</h2>
+<p>Neon se usa desde el navegador a través de un túnel de Cloudflare. Sin autenticación, cualquiera que encontrara la URL podría conectarse y hablar con un asistente capaz de ejecutar comandos en mi máquina. Así que lo primero fue cerrar la puerta de entrada: el endpoint que arranca una sesión devuelve 401 si no le llega un token válido.</p>
+<p>El diseño:</p>
+<ul>
+<li><strong>Contraseñas con bcrypt</strong>, nunca en claro. Si el usuario no existe, se ejecuta igualmente una comprobación de bcrypt contra un valor cualquiera, para que el tiempo de respuesta no delate qué usuarios existen.</li>
+<li><strong>Tokens de sesión opacos en el servidor</strong>, no JWT firmados: cerrar una sesión o hacerla caducar es borrar una entrada de un diccionario, sin rotar claves. Duran 30 días y se pierden si se reinicia el proceso, lo cual para una herramienta personal me parece aceptable.</li>
+<li><strong>Bloqueo por intentos fallidos:</strong> 5 fallos desde el mismo origen bloquean el login durante 15 minutos.</li>
+</ul>
+<pre><code class="language-python">def verify_credentials(username: str, password: str) -&gt; tuple[bool, str | None]:
+    user = _load_users().get(username)
+    if user is None:
+        # bcrypt se ejecuta igualmente: un usuario inexistente no se distingue por tiempo
+        bcrypt.checkpw(password.encode(&quot;utf-8&quot;), bcrypt.gensalt())
+        return False, &quot;no_such_user&quot;
+    if not bcrypt.checkpw(password.encode(&quot;utf-8&quot;), user[&quot;password_hash&quot;].encode(&quot;utf-8&quot;)):
+        return False, &quot;bad_password&quot;
+    if user[&quot;status&quot;] != &quot;approved&quot;:
+        return False, &quot;pending&quot;
+    return True, None
+</code></pre>
+<p>El motivo concreto solo se usa por dentro: hacia fuera, el login responde siempre con un mensaje genérico.</p>
+<h2>Capa 2: registrarse no es entrar</h2>
+<p>Quería poder invitar a otras personas sin tener que crear yo las cuentas, así que el registro está abierto, pero una cuenta nueva nace como "pendiente" y no puede entrar hasta que alguien la aprueba. La primera cuenta que se crea es la del propietario y se aprueba sola, porque alguien tiene que poder aprobar al resto.</p>
+<p>Lo importante es dónde se aprueba: <strong>no hay interfaz web para eso, a propósito.</strong> La aprobación se hace fuera de banda, con un script en la máquina. Así, una cuenta pendiente no puede aprobarse a sí misma, haga lo que haga desde el navegador.</p>
+<p><strong>Lección:</strong> la acción que da privilegios no debería estar disponible por el mismo canal que usa quien los pide.</p>
+<h2>Capa 3: la memoria de cada uno es suya</h2>
+<p>Al tener varios usuarios apareció un riesgo menos obvio. Neon guarda el historial de conversación para continuar entre reconexiones, y en ese historial está todo, incluida la confianza que se ha ido construyendo para ejecutar comandos como root. Si todos los usuarios compartieran el mismo archivo, un invitado heredaría el contexto del propietario. Por eso el historial se guarda por usuario.</p>
+<p>Y aquí entra el bug que conté en el capítulo sobre Neon: el nombre de usuario no llegaba al bot (iba en el sitio equivocado de la petición), así que durante días todas las sesiones cayeron en un historial genérico compartido. No dio ningún error. La separación por usuario "estaba implementada", pero no funcionaba.</p>
+<p><strong>Lección:</strong> una medida de aislamiento que no has comprobado de punta a punta no es una medida de aislamiento. Hay que verificar que el dato que separa a los usuarios llega de verdad a donde se usa.</p>
+<h2>Capa 4: confirmar en voz alta antes de lo irreversible</h2>
+<p>La herramienta de shell de Neon tenía un parámetro <code>confirmed</code>. Si un comando parecía destructivo, la herramienta no lo ejecutaba: devolvía <code>needs_confirmation</code> con la instrucción de repetírmelo en voz alta y esperar un sí explícito. Solo entonces el modelo podía volver a llamarla con <code>confirmed=true</code>.</p>
+<p>Para no depender solo del criterio del modelo, metí una lista de patrones que fuerza esa confirmación en lo que claramente parece irreversible: <code>rm -rf</code>, <code>dd</code>, <code>mkfs</code>, apagar o reiniciar, parar servicios, <code>git push --force</code>, <code>git reset --hard</code>, borrar tablas, <code>curl ... | sh</code>, una fork bomb...</p>
+<pre><code class="language-python">if _DESTRUCTIVE_RE.search(command) and not confirmed:
+    await params.result_callback({
+        &quot;status&quot;: &quot;needs_confirmation&quot;,
+        &quot;command&quot;: command,
+        &quot;instructions&quot;: &quot;Repite el comando en voz alta y pide un sí explícito. &quot;
+                        &quot;Solo vuelve a llamar con confirmed=true si confirma claramente.&quot;,
+    })
+    return
+</code></pre>
+<p>Todo queda registrado: cada llamada a la herramienta en un log propio y cada comando como root en otro log independiente, con su código de salida.</p>
+<h2>Lo que estas capas no protegen</h2>
+<p>Aquí hay que ser honesto, porque es fácil confundir capas que parecen de seguridad con capas que lo son:</p>
+<ul>
+<li><strong>La lista de patrones es una heurística.</strong> Detecta lo evidente, pero un comando destructivo escrito de otra forma no la dispara. Es defensa en profundidad, no una barrera.</li>
+<li><strong>La confirmación la gestiona el modelo.</strong> El parámetro <code>confirmed</code> lo pone el propio LLM. La instrucción es clara, pero sigue siendo una instrucción a un modelo, no un control que el modelo no pueda saltarse.</li>
+<li><strong>El envoltorio de root registra, pero no limita.</strong> Sudoers solo permite un script concreto, y ese script ejecuta como root el comando que recibe. Con eso tengo un registro limpio de todo lo que se ejecuta como root, pero en la práctica es root completo. Para limitarlo de verdad haría falta una lista cerrada de operaciones permitidas.</li>
+<li><strong>No reconoce mi voz.</strong> Pedí que Neon solo respondiera a la voz de quien había iniciado sesión. Lo que se montó fue el login; el reconocimiento de voz quedó pendiente. Cualquiera que hable cerca de mi micrófono en una sesión abierta habla con Neon.</li>
+</ul>
+<p><strong>Lección:</strong> antes de llamar "seguridad" a una capa, pregúntate qué pasa si el modelo se equivoca o si alguien escribe el mismo comando de otra forma. Si la respuesta es "se ejecuta igual", es un registro o una ayuda, no un control.</p>
+<h2>La decisión que más seguridad dio: quitarle la shell</h2>
+<p>Todo lo anterior intentaba hacer razonable que un modelo conversacional tuviera root. Cuando separé la conversación del trabajo (el capítulo anterior sobre Neon), la conclusión fue más simple: el modelo que conversa no necesita tocar el sistema. Le quité la herramienta de shell. Ahora Neon solo puede delegar: el trabajo lo hace un agente de fondo, que es el único camino real hacia la máquina.</p>
+<p>Con eso el riesgo no desaparece, se mueve. El agente de fondo trabaja sin nadie escuchando, así que la confirmación hablada ya no existe: sus reglas (no inventar resultados, nada irreversible sin permiso) viven en su prompt. Pero la superficie se reduce mucho. El modelo que está expuesto a lo que se dice por el micrófono ya no puede ejecutar nada, y el que ejecuta solo recibe tareas escritas y registradas.</p>
+<p><strong>Lección:</strong> la forma más eficaz de asegurar una capacidad peligrosa suele ser no dársela al componente más expuesto. Reducir quién puede hacer algo vale más que añadir capas alrededor de quien no debería hacerlo.</p>
+<h2>Lo que me llevo</h2>
+<ol>
+<li><strong>Cierra primero el punto de entrada:</strong> un asistente con herramientas expuesto sin autenticación es una shell pública.</li>
+<li><strong>Las acciones que dan privilegios, fuera de banda.</strong></li>
+<li><strong>Verifica el aislamiento de punta a punta</strong>, no basta con que esté implementado.</li>
+<li><strong>Distingue controles de ayudas:</strong> las heurísticas, las instrucciones al modelo y los envoltorios que solo registran no son barreras.</li>
+<li><strong>Registra todo lo que se ejecute con privilegios</strong>, aunque no lo puedas limitar.</li>
+<li><strong>Quítale las capacidades peligrosas al componente más expuesto.</strong></li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Hablemos de tu <span class="accent">próximo proyecto</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/es/#home">Inicio</a>
+      <a href="/es/#about">Sobre mí</a>
+      <a href="/es/#projects">Proyectos</a>
+      <a href="/es/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Hecho con Django, HTML y CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

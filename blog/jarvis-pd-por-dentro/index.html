@@ -1,0 +1,180 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Inside JARVIS-PD: an agent system that has to prove what it does | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/jarvis-pd-por-dentro/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/jarvis-pd-por-dentro/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 26 Sep 2026</p>
+      <h1>Inside JARVIS-PD: an agent system that has to prove what it does</h1>
+      <p class="lead">The core that has to prove what it does: gates backed by reproducible evidence, a Gate 0 that failed, leases with fencing tokens, versioned contracts, six audits for a single worker, and the real cost of so much rigor.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>JARVIS-PD · architecture</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>Saturno, the system several chapters of this blog talk about, was born pragmatic: an unstable but working version, built to keep moving. JARVIS-PD is exactly the opposite. It's the core I want to end up replacing everything else, and I'm building it with a rule that sounds bureaucratic and turned out to be the most useful thing in the project: nothing is taken for granted until there's reproducible evidence that it works. In this chapter I cover how it's designed, why a gate that can fail is worth more than ten design documents, and how much all this rigor really costs.</p>
+<h2>The principles</h2>
+<p>The project starts from a specification of my own, and a few non-negotiable principles come out of it:</p>
+<ul>
+<li><strong>PostgreSQL holds the canonical state.</strong> Nothing else is a source of truth.</li>
+<li><strong>Agents propose; deterministic services validate and materialize.</strong> A model never writes state directly.</li>
+<li><strong>LangGraph coordinates, but is never a source of truth.</strong> If the graph is lost, it's rebuilt from the database.</li>
+<li><strong>OpenClaw stays behind ports and adapters</strong>, without being coupled to the core.</li>
+<li><strong>State, outbox and critical audit are committed in the same transaction.</strong></li>
+<li><strong>Repeatable delivery doesn't mean repeated effect.</strong> A message can arrive twice; its effect, never.</li>
+</ul>
+<p>The tech is boring on purpose: a modular monolith in Python 3.12, Pydantic for the contracts, SQLAlchemy and Alembic on top of PostgreSQL, and pytest for the evidence. Concurrency invariants are tested against a real PostgreSQL; SQLite can't prove anything.</p>
+<h2>Phases, gates and evidence</h2>
+<p>The project moves forward in phases, and each phase ends in a gate with concrete requirements. Gate 0, "Integrity", has ten:</p>
+<ol>
+<li>Tasks and executions are only created and change state through authorized paths.</li>
+<li>State and outbox are committed in the same transaction.</li>
+<li>Repeated messages don't duplicate transitions.</li>
+<li>Two workers can't hold the same valid lease at the same time.</li>
+<li>A stale fencing token can't write.</li>
+<li>Schemas are recreated from scratch with versioned migrations.</li>
+<li>Backup and isolated restore recover the expected state.</li>
+<li>The audit reconstructs request, authorization and materialization.</li>
+<li>The user node contract is versioned, validated and only proposes.</li>
+<li>The evidence package makes it possible to reproduce the full evaluation.</li>
+</ol>
+<p>Each requirement is proven with executed tests and an evidence package (results, a database dump and hashes) that anyone can reproduce. Project statuses have a strict vocabulary: <code>PASS</code>, <code>READY_FOR_REVIEW</code>, <code>NOT_EVALUATED</code>, <code>SCOPED_NOT_AUTHORIZED</code>. Never "almost ready".</p>
+<h2>The gate that failed</h2>
+<p>The first definitive evaluation of Gate 0 came back <strong>FAIL</strong>, for three reasons:</p>
+<ul>
+<li><strong>The lease lifecycle was incomplete.</strong> The function to acquire a lease existed, but there were no deterministic paths to renew and release it. One test simulated the release by writing directly to the table, and that doesn't meet the contract: if the real system has no such path, the test is testing something else.</li>
+<li><strong>The controlled release of the outbox had no executed evidence.</strong> The inbox one was tested; the outbox one existed in the code, but no test exercised it.</li>
+<li><strong>A real type error remained.</strong> On top of that, the type check wasn't reproducible, because it wasn't pinned in the workflow.</li>
+</ul>
+<p>All three were fixed that same day, each in its own commit: reproducible types, a complete auditable lease lifecycle, evidence for the controlled outbox replay, and a hardened restore. After that, Gate 0 passed.</p>
+<p><strong>Lesson:</strong> a gate that can really fail is the most useful tool in a project. That FAIL found three real gaps that any "by eye" review would have waved through. And a test that simulates a path by writing directly to the database doesn't prove the path exists.</p>
+<h2>Leases and fencing tokens</h2>
+<p>Requirement 5 of the gate deserves an explanation, because it's the heart of concurrency. When a worker starts a task, it acquires a lease with an expiry date and receives a fencing token, a number that increases every time the lease changes hands:</p>
+<pre><code class="language-python">row = conn.execute(text(&quot;&quot;&quot;
+    INSERT INTO leases(resource_type, resource_id, owner_id, fencing_token, state, expires_at)
+    VALUES ('Task', :resource, :owner, 1, 'ACTIVE', :expires)
+    ON CONFLICT(resource_type, resource_id) DO UPDATE
+    SET owner_id = EXCLUDED.owner_id, fencing_token = leases.fencing_token + 1,
+        state = 'ACTIVE', expires_at = EXCLUDED.expires_at, updated_at = now()
+    WHERE leases.expires_at &lt;= :now OR leases.state IN ('EXPIRED', 'RELEASED', 'REVOKED')
+    RETURNING fencing_token&quot;&quot;&quot;), {...}).first()
+if row is None:
+    raise DomainError(ErrorCode.LEASE_REQUIRED, &quot;Resource already has a valid lease&quot;)
+</code></pre>
+<p>A single statement does all the work: if there's no lease, it creates one; if there's an expired or released one, it takes it and increments the token; if there's a valid one, it returns nothing and the acquisition fails. After that, every write checks that its token is still the current one. Picture this: a worker hangs, loses its lease and then "wakes up" with an old token. It can't write over the work of whoever replaced it. This is tested with two real threads competing against PostgreSQL, and only one gets the lease.</p>
+<p>In the same transaction in which the task starts, the outbox events and the audit records are written too. Either everything is committed, or nothing is.</p>
+<p><strong>Lesson:</strong> in a system with workers that can die halfway through, a lock isn't enough; you need a token that proves you're still the owner at the moment of writing.</p>
+<h2>Versioned contracts</h2>
+<p>Everything that crosses a boundary has a versioned JSON Schema contract: an agent's invocation and its result, the approval request and decision, the receipt for an effect, the compensation request, the planner's proposal, the result of a reconciliation, the context manifest... Fifteen in total, all at version 1.0.0.</p>
+<p>The context manifest ended up having a life outside the project. Its classification of reasons for excluding something from the context (for example, <code>BUDGET_EXCEEDED</code> as its own reason, distinct from "not relevant") is what Neon's context pruning uses today. Designing a contract well here paid off for something that didn't exist yet.</p>
+<h2>Six audits for one worker</h2>
+<p>The most demanding work package was the local worker's, the process that actually executes effects on the machine. It needed six rounds of external audit before passing, and each round raised the bar:</p>
+<ul>
+<li>At first, completing an execution neither locked nor validated the task. The fix was to lock execution, task and lease in the same unit of work, with version comparison.</li>
+<li>If the result of an effect is unknown, the system enters a "requires reconciliation" state and refuses to let another worker take over until it's reconciled. No blind retries.</li>
+<li>The worker validates its own identity with a persistent latch that fails closed: it refuses to run as root, with kernel capabilities or without <code>NoNewPrivs</code>, and it rejects symbolic links anywhere along the trusted paths.</li>
+<li>In the last round, every credential read from <code>/proc</code> had to match exactly the one the kernel returns for the current thread. Any missing, duplicated or divergent field leaves the latch closed.</li>
+<li>And the tests prove what matters: if validation fails before acquiring, the task is left as it was, with no executions or leases; if it fails right before the effect, the effect never runs.</li>
+</ul>
+<p><strong>Lesson:</strong> when a component executes real effects, you have to revalidate right before acting and not just at the start. The world may have changed in between.</p>
+<h2>The cost of rigor</h2>
+<p>The other side has to be told too. With all this, JARVIS-PD moves slowly. Gate 0 is certified, phase 1 is only partly implemented, the LangGraph coordination package is waiting for review, and the next packages are defined but not authorized. There was a moment when I was lost with the project and asked for exactly the opposite: an unstable but working Jarvis, even if it meant sacrificing technicalities. Two days later, Saturno stopped being a script for a single task and became an autonomous daemon that works on its own.</p>
+<p>Looking back, I think you need both. Saturno is where I explore, make mistakes quickly and find out what I really need (almost all the breakdown chapters come from there). JARVIS-PD is where what I already know I need gets built, so that it doesn't fail. The mistake would be to use JARVIS-PD's rigor to explore, or Saturno's speed for the core.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>Agents propose, deterministic services materialize.</strong></li>
+<li><strong>Gates with concrete requirements and reproducible evidence</strong>, and a status vocabulary with no "almost".</li>
+<li><strong>A gate that can fail finds what an eyeball review doesn't see.</strong></li>
+<li><strong>Don't simulate a path by writing to the database:</strong> if the path doesn't exist, the test proves nothing.</li>
+<li><strong>Leases with fencing tokens</strong> when workers can die halfway through.</li>
+<li><strong>Revalidate right before every effect</strong> and fail closed.</li>
+<li><strong>Rigor for the core, speed for exploring</strong>, each in its own place.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

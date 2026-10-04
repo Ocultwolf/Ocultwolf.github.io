@@ -1,0 +1,199 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Capturing free market data: nine agents and the connections that never say anything | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/capturar-datos-de-mercado-gratis/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/capturar-datos-de-mercado-gratis/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 03 Oct 2026</p>
+      <h1>Capturing free market data: nine agents and the connections that never say anything</h1>
+      <p class="lead">Nine agents that only capture free market data: what actually exists without paying, what you have to build, and why a connection that throws no errors is not a connection that works.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Trading bot · data</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>When you try to give a trading bot an edge, you quickly run into the same wall: the good data has no free history. Open interest, liquidations, the order book and on-chain flows are all visible live, but nobody hands you the past. The only way to have it is to start saving it yourself as soon as possible, because every day you don't capture is a day you can never get back. So I set up a series of agents that only capture: they don't trade or score anything, they just save. In this chapter I cover what is really free and what isn't. I also cover a lesson that repeated itself three times: a connection that throws no errors is not a connection that works.</p>
+<h2>The rules</h2>
+<p>All the agents follow the same rules:</p>
+<ul>
+<li><strong>They only capture.</strong> None of them trades or makes decisions. Keeping capture separate from analysis lets me change strategy without losing data.</li>
+<li><strong>Free and keyless</strong> whenever possible. If something requires payment, it gets documented and shelved.</li>
+<li><strong>Everything checked live.</strong> API documentation says one thing and reality says another, and that happens more often than you'd think.</li>
+<li><strong>What doesn't exist for free also gets written down</strong>, so I don't have to go looking for it again.</li>
+</ul>
+<h2>What is really free</h2>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Source</th>
+<th>What it captures</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Liquidations</td>
+<td>Binance Futures liquidation WebSocket + REST</td>
+<td>Every real liquidation executed, plus open interest and funding every few minutes</td>
+</tr>
+<tr>
+<td>Order flow</td>
+<td>Hyperliquid public WebSockets</td>
+<td>Order book (20 levels) and trades, summarized</td>
+</tr>
+<tr>
+<td>BTC/ETH on-chain</td>
+<td>CoinMetrics Community API</td>
+<td>Exchange inflows and outflows</td>
+</tr>
+<tr>
+<td>Stablecoins</td>
+<td>DeFiLlama</td>
+<td>Circulating supply of USDT, USDC and DAI</td>
+</tr>
+<tr>
+<td>SOL</td>
+<td>Public Solana RPC</td>
+<td>Balances of exchange custody wallets</td>
+</tr>
+<tr>
+<td>HYPE</td>
+<td>Hyperliquid API</td>
+<td>Total staked on the network</td>
+</tr>
+<tr>
+<td>Small caps</td>
+<td>SEC latest filings feed (EDGAR)</td>
+<td>Capital raise forms (S-1, S-3, 424B...)</td>
+</tr>
+<tr>
+<td>Memecoins</td>
+<td>PumpPortal WebSocket</td>
+<td>Token creation and migrations off the bonding curve</td>
+</tr>
+<tr>
+<td>Memecoins</td>
+<td>DexScreener API</td>
+<td>Liquidity and volume after migration</td>
+</tr>
+</tbody>
+</table>
+<h2>Three tricks to avoid drowning in data</h2>
+<p><strong>Summarize instead of saving every tick.</strong> The Binance order book sends about 10 updates per second per pair. With 7 pairs and two exchanges that would be millions of rows a day for nothing, because I'm not going to do HFT from a script at home with the latency of a normal internet connection. What's realistic is signals on a scale of seconds to minutes, like a sustained order book imbalance or aggressive volume delta. That's why the agent keeps state in memory and writes one summarized row per pair every few seconds.</p>
+<p><strong>Filter early.</strong> In memecoins, thousands of tokens are created every day and almost none of them ever get real liquidity. Instead of tracking them all, the quality filter is the migration: only tokens that leave the bonding curve get enriched with DexScreener data, and only during their first few hours, which is when the trajectory matters.</p>
+<p><strong>Poll at the rate the data changes.</strong> CoinMetrics on-chain data updates only a few times a day, so querying it every few seconds is pointless. Each source is polled at its own pace.</p>
+<h2>When there's no free data, build it (carefully)</h2>
+<p>Free exchange flows only exist for BTC and ETH. For SOL I had to build a substitute: watching the balances of exchange custody wallets directly through the public Solana RPC. The addresses come from an open label dataset with 100,001 rows, but 99,986 of them were user deposit wallets, useless at this scale. That left 14 custody wallets. When I validated them one by one with a real query, it turned out that 3 weren't valid Solana addresses (one literally had the shape of a Bitcoin address, a mistake in the dataset itself) and another 2 belonged to FTX. An open dataset is a starting point, not the truth.</p>
+<p>HYPE was another case. It isn't a Solana token but is native to Hyperliquid's own chain, which is a decentralized exchange, so there are no "exchange wallets" to watch. What does exist is the total staked on the network, and staking has a 7-day unlock period. If the total drops, that HYPE will be liquid within a week, which makes it a leading indicator of possible selling pressure. It's the same idea as exchange flows, but adapted to how that chain works instead of forcing a model that doesn't fit.</p>
+<p><strong>Lesson:</strong> when a signal doesn't exist for an asset, ask yourself what it actually measures and look for its equivalent in how that asset works, instead of copying another asset's method.</p>
+<h2>Estimates labeled as such</h2>
+<p>The liquidations agent stores two very different things. On one side, the real liquidations that have already been executed, which are data. On the other, an estimated heatmap of where pending liquidations might be. I calculate it the way commercial tools reportedly do: volume by price spread across leverage levels and adjusted to real open interest. That spread is an unverified assumption, and I marked it as such. The real liquidations are precisely what will let me calibrate the estimate someday instead of just believing it.</p>
+<h2>The connections that never say anything</h2>
+<p>And here comes the lesson of the chapter, which happened to me three times:</p>
+<ol>
+<li><strong>The liquidations that never arrived.</strong> The first version of the agent ran for more than three days without capturing a single liquidation. Binance had retired the old URL of its WebSocket, but the handshake still worked: the connection opened without error and a message simply never arrived. I found out by testing with BTC, which gets liquidated constantly, and seeing zero events in over a minute. It wasn't a quiet market, it was a dead endpoint.</li>
+<li><strong>The fix that didn't work for everything.</strong> Binance's URL migration wasn't the same for every type of stream. For liquidations you had to use the new base, but for the order book it was the other way around: the new base accepted the connection and never sent data, and the old one worked. The fix for one stream couldn't be copied to the other without testing it.</li>
+<li><strong>The trades that never arrived.</strong> Even after splitting each stream onto its own connection, the Binance trade flow always stayed at zero in the real deployment, without a single error or reconnection in the log. In isolated tests it did work. My suspicion is an undocumented limit on simultaneous connections per IP, but I never confirmed it, because so many tests in a row could have been triggering a block of their own. In the end I disabled the Binance part and stuck with Hyperliquid, which gives both order book and trades without problems. I wrote the diagnosis down so I can pick it back up with spaced-out tests.</li>
+</ol>
+<p>All three share the same pattern: none of them threw an exception. All the reconnection and error-handling code was there and did nothing, because there was no error to handle.</p>
+<p><strong>Lesson:</strong> on a stream, "connected" doesn't mean "receiving". You have to check that data is arriving (if nothing has come in N seconds on a market that never stops, the connection is dead) and not trust that there are no errors.</p>
+<h2>Where things stand</h2>
+<p>Right now there are eight agents capturing and about 260 MB of accumulated data, the oldest from mid-September. The Reddit one, meant as a free social signal for memecoins, is written but stopped. It needs credentials for a Reddit app, because anonymous access has been returning 403 for a while, and X no longer has a practical free tier. And I should say it plainly: there are no trading results from any of this yet, it's the capture phase. Also, in memecoins I know that a large share of the "profitable traders" stories have an enormous survivorship bias. This data is there precisely to check that, not to believe it.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>If it has no free history, start saving it today.</strong></li>
+<li><strong>Separate capture from analysis.</strong></li>
+<li><strong>Summarize, filter early and poll at the rate of the data.</strong></li>
+<li><strong>Validate open datasets</strong> before building on top of them.</li>
+<li><strong>Adapt the signal to how the asset works</strong>, don't copy another asset's method.</li>
+<li><strong>Label estimates as estimates</strong> and save the reality that will calibrate them.</li>
+<li><strong>"Connected" is not "receiving":</strong> watch that data arrives, not just that there are no errors.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

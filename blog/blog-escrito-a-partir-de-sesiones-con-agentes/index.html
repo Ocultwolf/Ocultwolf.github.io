@@ -1,0 +1,179 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>A blog written from my agent sessions (and why the first version was useless) | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/blog-escrito-a-partir-de-sesiones-con-agentes/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/blog-escrito-a-partir-de-sesiones-con-agentes/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 01 Oct 2026</p>
+      <h1>A blog written from my agent sessions (and why the first version was useless)</h1>
+      <p class="lead">How I turn hundreds of agent sessions into articles: why the automatic journal didn&#x27;t work, how I verify every fact, how I made the texts sound like me, and how I keep a secret from slipping out.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Craft · this blog</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>This blog is largely written by agents that read my work sessions with other agents. It sounds like a recursive joke, but there's a very concrete problem behind it: I spend all day working with Claude Code, Codex and my own agents, and everything I learn ends up buried in hundreds of conversations. In this chapter I explain how I built the system that turns that into articles, and why the first version produced entries that were useless to anyone. I also cover the three pieces that fixed it: verified sources, a filter with my voice, and a detector for sensitive data.</p>
+<h2>The first version: an automatic diary</h2>
+<p>The initial idea was an agent that would read what I had worked on each day every night and publish one entry per project. It's a Django command that runs from cron at 23:30:</p>
+<ol>
+<li><strong>Collects</strong> the day's messages from three sources: Claude Code sessions, Codex sessions and the OpenClaw command log. It groups them by piece of work: each named session is its own group, and automatic runs are grouped by project.</li>
+<li><strong>Filters</strong> out the noise ("hi", "ok", tests, lost sessions) and <strong>redacts</strong> keys, tokens and pasted text.</li>
+<li><strong>Summarizes</strong> into a bounded digest: at most 12 snippets per group and 320 characters per snippet. The model never receives the whole session.</li>
+<li><strong>Generates</strong> the entry with <code>claude -p</code>. The prompt forbids paths, ports, service names, internal URLs and any infrastructure detail, and it requires returning <code>skip</code> if there's no real work to talk about.</li>
+<li><strong>Retries once</strong> if the model discards. It isn't deterministic, and a second attempt keeps me from losing real work to a random discard.</li>
+<li><strong>Doesn't duplicate:</strong> each entry carries a source key (project and day), so if I run the command twice it doesn't publish twice.</li>
+</ol>
+<p>Security-wise it was well thought out. In one month it published 23 entries and discarded 17.</p>
+<h2>Why it wasn't good enough</h2>
+<p>The entries were correct, but they gave whoever read them very little. They were a diary of "this week I was working on...", with strategies and thoughts mixed together and sorted by date, not by topic. When I reviewed the system to rebuild it, the cause became very clear: <strong>the generator only saw what I asked for, never what happened</strong>. The digest was my messages, truncated. It didn't include the agents' replies, the code, the commits or the test results. With that you can only write a vague narrative of intentions.</p>
+<p>The best example is in the sync's own log. On September 22 it discarded an entry with this reason: "the evidence only describes an operational problem (excessive API spending) and an audit request, with no real completed work to document". That day was the diagnosis of the 12-million-token incident, which became the chapter on cost. Read from my messages, it looked like a complaint. The real work was in the replies, in the logs and in the usage report, and the generator couldn't see them.</p>
+<p><strong>Lesson:</strong> what a model generates can't be better than what you give it to read. If it only sees the questions, it can't tell the answers.</p>
+<h2>The new version: chapters by topic, with verified sources</h2>
+<p>I changed the format and the sources at the same time. Instead of one entry per day, there are now chapters by technical topic, each self-contained, with this structure: problem, design, what failed, fix and lessons. And instead of a digest of my messages, each chapter is built from everything that leaves a real trace: commits with their messages, the current code, Saturno's task database, and the logs and agent replies in the sessions, which is where the diagnoses are. For now this isn't automatic: chapters are prepared in a dedicated session with an agent that goes through the sources one by one, and the nightly sync no longer publishes, it only leaves drafts to serve as material.</p>
+<p>The most important rule: <strong>every fact is checked against the code or the source before it's published</strong>. Several chapters changed along the way because of it:</p>
+<ul>
+<li>In the Saturno chapter, a code snippet that was illustrative in the draft turned out not to match what the real code does. I replaced it with the actual line.</li>
+<li>In the cost chapter, the $2,400 figure that appeared in the code's own comments was a units error (cents read as dollars), and I checked it against the real balance.</li>
+<li>In the concurrency chapter, when I checked the validations against the active branch I found they weren't there: they lived in a WIP commit on another branch. That ended up being an entire section of the chapter.</li>
+</ul>
+<p>What can't be verified is stated as such: "most likely", "according to the comparison I did at the time", "it was never run again".</p>
+<p><strong>Lesson:</strong> a technical text generated with agents needs the same control as its code. Every claim has to be checked against something other than the model's memory.</p>
+<h2>Making it sound like me</h2>
+<p>The second problem was voice. The generated texts sounded like what they are: correct, neutral, with nobody behind them. I wanted them to sound like how I talk. With one catch: I write fast, with no accent marks, almost no commas and with spelling mistakes, and those do have to come out corrected.</p>
+<h3>Where my voice comes from</h3>
+<p>There was plenty of material, namely all my messages in the sessions. A script extracts them from three sources (Claude Code, Codex and what I've said by voice to Neon, already transcribed) and discards everything that isn't my voice:</p>
+<ul>
+<li>the automatic prompts from Saturno and from the sync itself;</li>
+<li>the commands, tests and terminal errors I paste;</li>
+<li>the messages Neon forwards over the bridge, which are written in voseo and refer to "Pablo" in the third person;</li>
+<li>and the texts I drafted with another AI and pasted afterwards.</li>
+</ul>
+<p>That last filter has a trick. Those texts can be told apart because I don't use accent marks. If a message I typed has more than 3.5% of words with an accent mark or an ñ, I didn't write it. It isn't applied to transcribed voice, because the STT does add accent marks. In the end about 850 messages and 31,000 words were left.</p>
+<pre><code class="language-python">def accent_rate(text: str) -&gt; float:
+    words = re.findall(r&quot;\w+&quot;, text)
+    return sum(bool(re.search(&quot;[áéíóúñ¿¡]&quot;, w)) for w in words) / max(len(words), 1)
+
+typed_by_other = source != &quot;neon_voz&quot; and accent_rate(text) &gt; 0.035
+</code></pre>
+<h3>Prompt, not fine-tuning</h3>
+<p>I considered training a model, but ruled it out for three reasons. First, my messages are instructions to agents, not articles, and a model trained on them would learn to write "ok go on with that point". Second, it would also learn my spelling mistakes, unless I first corrected the whole corpus and built pairs of "neutral text → my text". And third, a small model trained locally writes technical content quite a bit worse than a large model that's well guided.</p>
+<p>So the filter is a prompt with two pieces that I can read and edit. One is a <strong>voice profile</strong>: how I reason, which connectors I use and how sparingly, Spanish from Spain, and what I never do. The other is an <strong>example bank</strong>, with real messages of mine with spelling and punctuation corrected and not a single word changed.</p>
+<h3>What had to be adjusted</h3>
+<ul>
+<li><strong>The first version was timid.</strong> With so many "keep the content" and "don't make things up" instructions, the model only fixed accent marks. I had to tell it explicitly to rewrite every sentence from scratch the way I'd say it, without removing the ban on adding facts.</li>
+<li><strong>Code can't go through the model.</strong> Code blocks are replaced with placeholders before calling the model and restored afterwards. If any placeholder is missing from the output, the filter fails instead of publishing a text with lost code.</li>
+<li><strong>It made up emotions.</strong> In one test it added "at first I didn't understand why", which wasn't in the original. Now I check every output with a word-by-word diff to see what it added.</li>
+<li><strong>Colloquialisms that aren't mine.</strong> In one chapter it slipped in expressions I don't use. The rule is now written into the profile: if it doesn't appear in my corpus, it doesn't go in.</li>
+</ul>
+<pre><code class="language-python">def _protect_code(text):
+    blocks = []
+    def stash(m):
+        blocks.append(m.group(0))
+        return f&quot;[[BLOQUE_CODIGO_{len(blocks) - 1}]]&quot;
+    return CODE_BLOCK.sub(stash, text), blocks
+</code></pre>
+<p><strong>Lesson:</strong> to imitate a style, an explicit profile with real corrected examples works better than training on text that isn't the kind you want to produce. And the imitation has to be watched, because it tends to make things up and exaggerate.</p>
+<h2>Don't let anything leak</h2>
+<p>The third piece is the one I care about most. A work session ends up containing everything, keys and tokens included, so any chapter built from them is a leak risk. That's why there's a detector that looks for known key formats, long tokens, JWTs, IPs, emails, user paths, tunnel URLs, assignments of the <code>KEY=value</code> type and names of credential environment variables. There's also a command that checks all posts before publishing:</p>
+<pre><code class="language-bash">python manage.py audit_posts          # informa; sale con código 1 si hay algo pendiente
+python manage.py audit_posts --fix    # sustituye lo encontrado por [censurado]
+</code></pre>
+<p>On its first pass it found, inside a code snippet, the names of the environment variables for a provider's key and voice ID. They weren't the values, but the rule is not to publish even that, and they now appear as <code>[censurado]</code>. The non-zero exit code is deliberate: that way the check blocks publication instead of staying a suggestion.</p>
+<p><strong>Lesson:</strong> when the raw material contains secrets, redaction can't depend on me remembering. It has to be an automatic step that fails explicitly if it finds something.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>The model can only tell what it reads.</strong> Give it the results, not just the questions.</li>
+<li><strong>Organize by topic, not by date.</strong> A diary serves whoever writes it; a chapter serves whoever reads it.</li>
+<li><strong>Verify every fact against the source</strong>, and say what you couldn't verify.</li>
+<li><strong>For voice, a profile and real examples before fine-tuning</strong>, and watch what the model adds.</li>
+<li><strong>Code isn't given to the model to rewrite</strong>: it's protected and restored.</li>
+<li><strong>Secret redaction: automatic and blocking.</strong></li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Orchestrating multiple models: each in its place | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/orquestar-varios-modelos/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/orquestar-varios-modelos/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 29 Sep 2026</p>
+      <h1>Orchestrating multiple models: each in its place</h1>
+      <p class="lead">Half a dozen models, each in its own role: the expensive one where judgment matters and the cheap one where its mistakes get caught. The patterns that work, and what happens when the one that fails is the reviewer.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>Agents · models</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>No quiero depender de un solo modelo. Not on principle, but out of pure arithmetic: some jobs need the best model available, others a small model does just as well for a fraction of the price, and others come out free if you send them down the right path. Right now my systems have half a dozen different models, each with its own role. In this chapter I explain how I've split them up, which patterns have worked for me, and what happens when the one that fails is the strong model, the one that reviews all the others.</p>
+<h2>The map</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Model</th>
+<th>Why that one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Voice conversation (Neon)</td>
+<td>Claude Haiku</td>
+<td>Cheap and fast; it only talks, it doesn't do work</td>
+</tr>
+<tr>
+<td>Context judge ("is it still enough?")</td>
+<td>Jev, via OpenRouter</td>
+<td>Cents per million tokens, free output, 4 s timeout</td>
+</tr>
+<tr>
+<td>Saturno's programmer</td>
+<td>Codex with an NVIDIA NIM model, through a proxy</td>
+<td>Almost no cost; weaker, which is why it gets reviewed</td>
+</tr>
+<tr>
+<td>Saturno's reviewer and fixer</td>
+<td>Claude (Claude Code)</td>
+<td>The most reliable judgment in the system</td>
+</tr>
+<tr>
+<td>Goal planner</td>
+<td>Claude, read-only</td>
+<td>Reads the project's real state and proposes the next step</td>
+</tr>
+<tr>
+<td>Neon's background agent</td>
+<td><code>claude -p</code> on my subscription</td>
+<td>Heavy work without paying for the API</td>
+</tr>
+<tr>
+<td>Blog generation and voice</td>
+<td>Claude Sonnet</td>
+<td>Good writing at a moderate cost</td>
+</tr>
+</tbody>
+</table>
+<p>The underlying rule is simple: <strong>the expensive model only where judgment matters, and the cheap one where a mistake can be caught and corrected.</strong></p>
+<h2>Pattern 1: a cheap one writes, a strong one reviews</h2>
+<p>In Saturno, the code is written by Codex with a model served by NVIDIA NIM through a proxy, practically for free, and reviewed by Claude. If the reviewer rejects twice in a row for the same reason, there's no point in sending the same feedback to the weak model again. What I do is escalate to a fixer, which is Claude with write permissions, and it applies the fix itself, because it already diagnosed the problem while reviewing.</p>
+<pre><code class="language-python">def _route_after_supervise(state: SaturnoState) -&gt; str:
+    stuck = (
+        state.get(&quot;supervisor_verdict&quot;) == &quot;rejected&quot;
+        and state.get(&quot;consecutive_rejections&quot;, 0) &gt;= settings.auto_fix_threshold   # 2
+        and not state.get(&quot;auto_fix_used&quot;)
+    )
+    return &quot;auto_fix&quot; if stuck else &quot;reflect&quot;
+</code></pre>
+<p>In practice, the reviewer's rejections were very specific and almost always the same kind: code that didn't compile because of broken indentation, a badly indented test fixture, an absolute path put in by hand, a <code>try/except</code> that was added and left the file unable to compile. The cheap model makes mistakes that a reviewer catches in seconds, and that's exactly what makes the split pay off.</p>
+<p><strong>Lesson:</strong> a cheap model with a strong one reviewing comes out better than the strong one doing everything, as long as the cheap model's mistakes can be detected. And if the same mistake repeats twice, switch models instead of repeating the feedback.</p>
+<h2>Pattern 2: when the reviewer is the one that fails</h2>
+<p>Saturno's numbers from September 2 to 23 in JARVIS-PD told me something I didn't expect. Out of 104 tasks:</p>
+<ul>
+<li><strong>51</strong> were approved by the reviewer.</li>
+<li><strong>38</strong> used up their 5 attempts without approval, and I ended up approving them by hand.</li>
+<li><strong>6</strong> were resolved by the fixer.</li>
+<li><strong>3</strong> were approved by Neon and <strong>5</strong> ended in error.</li>
+</ul>
+<p>What caught my attention is in those 38. In 28 of them the reviewer left no usable feedback: either the field was empty, or what was there was the raw response of a call that never actually did anything, with zero milliseconds of API time and zero cost. In other words, in most cases the one failing wasn't the programmer but the reviewer; most likely because of session limits, timeouts, or calls that never even ran. And from the outside that looks the same as "the programmer can't get approved": the attempt counter goes up and the task runs out.</p>
+<p><strong>Lesson:</strong> in a "one writes, another reviews" chain, the reviewer is a single point of failure. A verdict that never arrives can't count as a rejection: you have to tell "rejected with a reason" apart from "no review happened", just as in the chapter on outages I had to tell task failures apart from infrastructure failures.</p>
+<h2>Pattern 3: route for independence too</h2>
+<p>Saturno's triage is deliberately dumb: it looks for keywords in the goal. If it sounds like code, it goes to the programmer; if it sounds like design or research, to the planner; otherwise, to Claude in conversation mode. And if the programmer's call budget runs out, it falls back to a local model.</p>
+<pre><code class="language-python">if any(hint in goal for hint in CODE_HINTS):
+    next_agent = &quot;codex-worker&quot;
+elif any(hint in goal for hint in DEEP_HINTS):
+    next_agent = &quot;codex-planner&quot;
+else:
+    next_agent = &quot;claude-chat&quot;
+</code></pre>
+<p>The most interesting part is the last branch. In principle, anything that isn't code should go to a local model (Ollama, through the OpenClaw gateway). But that route had a bug of its own in OpenClaw when compacting transcripts, independent of the model. As the fallback I chose Claude directly, and not for its quality: it uses a different authentication and quota from Codex's, so it can never compete with the programmer for the same session or go down because of the same limit.</p>
+<p><strong>Lesson:</strong> when choosing the fallback model, also check whether it fails independently. A fallback that shares a quota or authentication with the primary goes down at the same time as the primary.</p>
+<h2>Pattern 4: the same model by another path is a different product</h2>
+<p>Two examples of this:</p>
+<ul>
+<li><strong>The gateway that pointed to an expired session.</strong> OpenClaw's routing for the programmer was still pointing to an expired ChatGPT OAuth session, and its way of switching providers wasn't being applied reliably. The fix was to bypass the gateway and launch Codex directly inside the container against the NVIDIA NIM proxy, which was already tested.</li>
+<li><strong>Kimi Code versus the Moonshot API.</strong> When I tried Kimi as the programmer, the task died on a limit of 3 requests per minute. Looking into it, it turned out there are two different endpoints: the Kimi Code product's, with its own authentication and a very low limit, and Moonshot's general API, with its own key. Same model, two products with completely different limits. One caveat, though: the fact that an isolated API call worked didn't prove there wasn't also an account-level limit, because a single call never triggers a "maximum 3 per minute".</li>
+</ul>
+<p><strong>Lesson:</strong> when you evaluate a model, evaluate the whole path: gateway, authentication, limits and permission mode. Half of the problems I had with new models weren't the model's fault.</p>
+<h2>Pattern 5: small models as judges, with a safe default</h2>
+<p>Jev is the clearest example. To decide whether an old tool output can be removed from Neon's context, you don't need a big model: a yes-or-no question is enough ("is the context still enough without this?"), and a small model answers it for cents. The key is what happens when it fails. If Jev doesn't respond or responds with something unusable, the answer is treated as "don't remove it": when in doubt, more context, never less. And if it fails once in a session, I stop calling it and switch to a stricter budget.</p>
+<p><strong>Lesson:</strong> a small model can act as a judge in bounded decisions, as long as its failure has a safe default and doesn't block the rest of the system.</p>
+<h2>Pattern 6: evaluate a new model without trusting it</h2>
+<p>When I put Kimi to work on a separate branch, the rule was not to trust what it said it had done: the evaluation had to be independent, with tests, reviewing the diff and checking whether it met what was asked. In the end nothing could be evaluated, because it died on the request limit before touching any code. But from the little it did, the reasoning was good: it understood the project's state and the goal well. That "couldn't be evaluated" is also a result, and I wrote it down as such instead of drawing conclusions from an experiment that didn't finish.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>The expensive model only where judgment matters</strong>; the cheap one, where its mistakes can be detected.</li>
+<li><strong>Escalate to a stronger model after two identical rejections</strong>; don't repeat the same feedback.</li>
+<li><strong>The reviewer fails too:</strong> tell "rejected" apart from "no review happened".</li>
+<li><strong>Choose fallbacks that fail independently</strong> (a different quota, a different authentication).</li>
+<li><strong>Evaluate the whole path</strong>, not just the model: gateway, limits, permissions.</li>
+<li><strong>Small judges with safe defaults.</strong></li>
+<li><strong>Evaluate new models independently</strong>, and an experiment that didn't finish is not a negative result.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>

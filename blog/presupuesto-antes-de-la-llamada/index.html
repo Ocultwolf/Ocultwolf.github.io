@@ -1,0 +1,178 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#07090f" />
+  <title>Putting a budget on a call before it goes out | Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/portfolio/css/styles.css" />
+  <link rel="stylesheet" href="/static/portfolio/css/responsive-overrides.css" />
+  <style>
+    /* Compatibilidad para las paginas de blog (heredan clases del layout anterior) */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 3rem; }
+    .page-title { padding: 9rem 0 2rem; }
+    .page-title h1, .page-title .eyebrow, .page-title .lead { visibility: visible; opacity: 1; }
+    .eyebrow { font-size: .7rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
+    .lead { font-size: .95rem; line-height: 1.85; color: var(--muted); max-width: 640px; }
+    .content { padding: 1rem 0 6rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+    .card { padding: 1.5rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
+    .card h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 800; color: var(--white); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    .card h3 a { color: inherit; text-decoration: none; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.75; font-size: .88rem; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .9rem; font-size: .75rem; color: var(--muted); }
+    .meta { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .85rem; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .page-title { padding-top: 7rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav id="nav">
+    <a href="/" class="logo">Pablo<span>.dev</span></a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <ul id="navMenu">
+      <li><a href="/#home">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#projects">Projects</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+    <div class="lang-switch" role="group" aria-label="Language">
+      <a href="/blog/presupuesto-antes-de-la-llamada/" hreflang="en" lang="en" class="active" aria-current="true">EN</a>
+      <span aria-hidden="true">/</span>
+      <a href="/es/blog/presupuesto-antes-de-la-llamada/" hreflang="es" lang="es">ES</a>
+    </div>
+  </nav>
+
+  
+<main>
+  <section class="page-title">
+    <div class="container">
+      <p class="eyebrow">Blog · 25 Sep 2026</p>
+      <h1>Putting a budget on a call before it goes out</h1>
+      <p class="lead">A policy enforcement point in front of every model call: measure against actual usage, fail closed at every step, and why a control that validates one thing and sends another controls nothing.</p>
+    </div>
+  </section>
+  <section class="content">
+    <div class="container">
+      <article class="card">
+        <div class="meta" style="margin-top:0;"><span>JARVIS-PD · tokens</span><span><a href="/blog/">Back to blog</a></span></div>
+        <div class="post-body"><p>In the chapter on Neon's cost, I described how one session ate 12 million tokens before anyone noticed. The safeguards I added there react during the session or after it. With JARVIS-PD I wanted to go one step further: no call to a model can go out unless it fits its budget, and any surprise in consumption blocks the system instead of going unnoticed. This chapter covers how I designed that piece, a policy enforcement point (PEP) in front of every call, and what I learned from actually measuring how many tokens get spent.</p>
+<h2>The underlying question: how many tokens will this cost?</h2>
+<p>To enforce a budget before the call, you have to know what the call will cost before making it. There were two options:</p>
+<ul>
+<li><strong>Policy A:</strong> estimate locally with a tokenizer. It's fast, free, and depends on no one.</li>
+<li><strong>Policy B:</strong> ask the provider through its counting endpoint, which counts tokens without generating anything, and only then make the real call. At most two contacts per run: one to count and one to generate.</li>
+</ul>
+<p>I chose B out of caution, before having measured anything. Then I measured.</p>
+<h2>The measurement: the local tokenizer came in at a third</h2>
+<p>I made a single real call, expressly authorized (a minimal request to Codex asking it to reply "OK"), and compared the real usage with the local estimate:</p>
+<ul>
+<li><strong>Real usage according to the API:</strong> 14,861 input tokens.</li>
+<li><strong>Local estimate</strong> (the prompt rendered locally and counted with tiktoken): about 4,860.</li>
+</ul>
+<p>The tokenizer came in at a third. The cause is that the local rendering didn't include the tool definitions that travel in the real request, and those definitions were most of the count. A budget calculated locally would have been three times too optimistic every time, which is exactly the failure the whole design is meant to prevent.</p>
+<p>Another equally useful finding came out of it: the summary that the Codex CLI prints when it finishes ("tokens used: 3858") doesn't match the API's real usage. They are different metrics.</p>
+<p><strong>Lesson:</strong> before enforcing a budget, measure against the real <code>usage</code> the API returns, not against what your tokenizer estimates or what a CLI prints. The tools, schemas and system prompt you can't see are usually most of it.</p>
+<h2>What I couldn't validate, and why it didn't block me</h2>
+<p>I couldn't test the premise of Policy B, that the provider's pre-count matches what's later billed. There's no pay-per-use API key on this machine, only the subscription login, and using those credentials for the counting endpoint would have meant taking them outside their intended use. I didn't try.</p>
+<p>This didn't hold up development, for a design reason: the system already had a safety net built for exactly this case. If the pre-count and the real usage diverge, the policy locks persistently. If the premise turns out to be false in production, the system fails closed and raises the alarm, instead of carrying on with a badly calculated budget.</p>
+<h2>The design: fail closed at every step</h2>
+<p>The flow of an invocation is short, and every step has a safe exit:</p>
+<pre><code class="language-python">def invoke(self, request, sender):
+    self._validate_static(request)                               # 1. reglas fijas
+    input_hash = hashlib.sha256(request.sealed_input).hexdigest()
+    self._reserve_invocation(request.invocation_id, input_hash)  # 2. idempotencia
+
+    reserved_input = self._count_client.count(request)           # 3. contacto 1: contar
+    if not isinstance(reserved_input, int) or isinstance(reserved_input, bool) or reserved_input &lt; 0:
+        self._block_policy(&quot;COUNT_RESULT_INVALID&quot;)
+        raise DomainError(ErrorCode.PRECONDITION_FAILED, &quot;COUNT_RESULT_INVALID&quot;)
+    if reserved_input + request.max_output_tokens &gt; self._policy.token_budget_total:
+        raise DomainError(ErrorCode.PRECONDITION_FAILED, &quot;TOKEN_BUDGET_EXCEEDED&quot;)
+
+    response = sender(request)                                   # 4. contacto 2: generar
+    usage = self._parse_usage(response)
+    self._verify_postflight(request, reserved_input, usage)      # 5. comparar
+    self._complete_invocation(request.invocation_id, usage)
+    return usage
+</code></pre>
+<ol>
+<li><strong>Fixed rules.</strong> Policy version, runtime digest and version, exact model, identity of the counting endpoint, a non-empty sealed input, no tools, no skills, no history, no fallbacks, no extended reasoning mode, and an explicit output limit that doesn't exceed the policy's. If anything doesn't add up, nobody gets contacted.</li>
+<li><strong>Idempotency.</strong> Each invocation reserves its identifier in PostgreSQL before talking to the provider. If anything fails from here on (a timeout, a network error), the reservation stays "in progress" forever and that identifier can't be retried. That's inconvenient on purpose: a silent retry is exactly how a cost gets duplicated.</li>
+<li><strong>Budget before generating.</strong> The reserved input tokens plus the output limit have to fit within the policy total.</li>
+<li><strong>A single generation.</strong></li>
+<li><strong>Post-check.</strong> If the model that responded isn't the expected one, if there was more than one attempt, if the real input deviates from the count by more than the tolerance, or if the output exceeded the limit, the entire policy locks persistently until someone reviews it.</li>
+</ol>
+<p>I didn't delegate the concurrency guarantee of the reservation (that two requests with the same identifier can't both get through). Because it was so critical, the reviewer model wrote it and verified it directly, with a real race of 5 threads on the same identifier. Exactly one won, through real row locking and not a simulated one.</p>
+<h2>A local estimator, but only where it's reliable</h2>
+<p>Without a paid key there was no counting endpoint, so a local counter was needed. What's interesting is why it was viable here, when the measurement said the tokenizer came in at a third. The underestimate came from the tools, skills and history that travel in the real request, and the fixed rules in step 1 already reject any request that carries them. For the only thing this policy lets through, the sealed input is the entire payload, so counting it directly should come much closer.</p>
+<p>Even so, "much closer" still isn't exact, so I added a tolerance margin to the policy. By default it's zero, which is correct with an authoritative counter, and it can be widened with a measured margin when an estimator is used. The estimator is still uncalibrated against real usage, and it's written down that way.</p>
+<p><strong>Lesson:</strong> an estimator that fails in general can be reliable in a narrow case if your own rules eliminate what made it fail. But it's still an estimator: give it an explicit margin and don't treat it as truth.</p>
+<h2>From prototype to runner: "MVP achieved" without having run it</h2>
+<p>Codex wrote the HTTP runner that puts this PEP in front of the real calls and reported that the MVP was achieved, with tests, ruff and mypy all green and a "demonstration" document. But the document was instructions for running it, not evidence that it had been run. Nothing had been executed. The first real request exposed three bugs, and testing by hand turned up two more:</p>
+<ol>
+<li>The forwarding URL had <code>/v1</code> duplicated.</li>
+<li>It expected a normal JSON response, but the Responses API returns an SSE stream.</li>
+<li>A unit-of-work factory that was wrapped twice raised a <code>TypeError</code> on the first invocation.</li>
+<li>The output limit the client sent was replaced by the policy's for the check, but the body forwarded to the provider still carried the client's original value. In other words, the budget was checked with one number and spent with another.</li>
+<li>The 403 only exposed the generic error code, not the specific reason for the rejection.</li>
+</ol>
+<p>The fourth is the most serious: a budget control that validates one thing and sends another controls nothing, and on top of that it raises no error. I fixed all five and verified them again by hand against the real system, and this time the demonstration was saved as captured evidence: a real request that passes through the policy and reaches the model, one with too many output tokens rejected before contacting anyone, and one whose input already exceeds the budget, rejected all the same and with its identifier blocked forever.</p>
+<p><strong>Lesson:</strong> at a control point, what gets validated and what gets sent have to be literally the same object. And a "it works" without a captured execution isn't evidence, it's a promise.</p>
+<h2>A wrong conclusion drawn from real code</h2>
+<p>To connect the runner to OpenClaw, I needed to know whether its configuration decides which provider the main model uses. Codex's first attempt failed silently because of the sandbox: it couldn't access Docker, and it reported that as a real permissions problem. The second one did read actual code, but drew an incorrect conclusion: it saw that one part of OpenClaw only reads the provider configuration for a review subsystem and generalized that to "the configuration doesn't affect the main model".</p>
+<p>Reading the function that resolves the provider, and its call, directly, the reality was different. For agents without an explicit override, OpenClaw doesn't send any provider when starting the thread, so the Codex binary is free to resolve it from its own configuration. These were two independent facts, and they had been mixed together. Even so, I noted it as not verified end to end, because reading code isn't the same as starting a real thread with the configuration changed.</p>
+<p><strong>Lesson:</strong> an agent having read real code doesn't make its conclusion correct. When the conclusion is a generalization ("this doesn't affect that"), look for the exact point in the code that would support it.</p>
+<h2>What I take away</h2>
+<ol>
+<li><strong>Budget before the call</strong>, don't just watch afterwards.</li>
+<li><strong>Measure against the real <code>usage</code></strong>: local tokenizers and CLIs can come in at a third.</li>
+<li><strong>Fail closed:</strong> no silent retries, with single-use identifiers and persistent lockout on any deviation.</li>
+<li><strong>An estimator only where your rules make it reliable</strong>, and always with an explicit margin.</li>
+<li><strong>What gets validated and what gets sent, the same object.</strong></li>
+<li><strong>Captured evidence, not instructions</strong>, and conclusions backed by the exact point in the code.</li>
+</ol></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+
+  <footer>
+    <div class="foot-cta">
+      <h2>Let's talk about your <span class="accent">next project</span></h2>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <a href="mailto:pablodominguezviera@gmail.com" class="btn-icon email-btn copy-email-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+          pablodominguezviera@gmail.com
+        </a>
+        <a href="https://github.com/Ocultwolf" target="_blank" rel="noopener noreferrer" class="btn-icon github-btn">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+    <div class="foot-links">
+      <a href="/#home">Home</a>
+      <a href="/#about">About</a>
+      <a href="/#projects">Projects</a>
+      <a href="/blog/">Blog</a>
+    </div>
+  </footer>
+  <div class="copy">© 2026 Pablo Dominguez Viera. Built with Django, HTML and CSS.</div>
+
+  <script src="/static/portfolio/js/gsap.min.js"></script>
+  <script src="/static/portfolio/js/ScrollTrigger.min.js"></script>
+  <script src="/static/portfolio/js/main.js"></script>
+</body>
+</html>
